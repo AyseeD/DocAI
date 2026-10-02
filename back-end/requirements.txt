@@ -1,0 +1,20 @@
+# Web API
+fastapi>=0.115
+uvicorn[standard]
+
+# Validation / configuration
+pydantic
+pydantic-settings
+python-dotenv
+
+# File uploads
+python-multipart
+
+# PDF processing
+pypdf
+
+# HTTP requests
+httpx
+
+# Vector search PostgreSQL + pgvector
+pgvector

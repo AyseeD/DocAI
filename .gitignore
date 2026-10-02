@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .env
+__pycache__/
+.venv/
+database.sqlite
+.DS_Store
+app/.DS_Store
