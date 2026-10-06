@@ -16,5 +16,6 @@ pypdf
 # HTTP requests
 httpx
 
-# Vector search PostgreSQL + pgvector
+# Vector search PostgreSQL + pgvector, postgresql adapter for python
 pgvector
+psycopg[binary]>=3.2,<4
