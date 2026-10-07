@@ -31,3 +31,4 @@ app/.DS_Store
 docs
 
 package-lock.json
+compose.yml
