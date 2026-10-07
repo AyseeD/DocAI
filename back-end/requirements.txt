@@ -19,3 +19,6 @@ httpx
 # Vector search PostgreSQL + pgvector, postgresql adapter for python
 pgvector
 psycopg[binary]>=3.2,<4
+
+# general-purpose retrying
+tenacity>=9,<10
