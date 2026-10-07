@@ -1,0 +1,73 @@
+.sidebar {
+  padding: 20px;
+  border-right: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.sidebar-logo {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 32px;
+}
+
+.add-document-button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.add-document-button:hover {
+  background: #f9fafb;
+}
+
+.documents-section {
+  margin-top: 28px;
+}
+
+.documents-section h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.document-item {
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.document-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-status {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.document-status.processing {
+  color: #6b7280;
+}
+
+.document-status.failed {
+  color: #b91c1c;
+}
