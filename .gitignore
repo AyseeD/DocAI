@@ -29,3 +29,5 @@ database.sqlite
 .DS_Store
 app/.DS_Store
 docs
+
+package-lock.json
