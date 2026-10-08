@@ -1,21 +1,29 @@
 import './Sidebar.css'
 
+// Sidebar'ın aldığı belge verisinin yapısını tanımlıyoruz.
 type Document = {
   id: string
   filename: string
   status: 'ready' | 'processing' | 'failed'
 }
 
+// Parent component'ten alınacak verileri ve kullanıcı etkileşiminde çağrılacak fonksiyonu tanımlıyoruz.
 type SidebarProps = {
   documents: Document[]
+  selectedDocumentId: string | null
+  onSelectDocument: (documentId: string) => void
 }
 
-function Sidebar({ documents }: SidebarProps) {
+function Sidebar({
+  documents,
+  selectedDocumentId,
+  onSelectDocument,
+}: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">DocAI</div>
 
-      <button className="add-document-button">
+      <button type="button" className="add-document-button">
         + Add document
       </button>
 
@@ -23,8 +31,20 @@ function Sidebar({ documents }: SidebarProps) {
         <h2>Documents</h2>
 
         <div className="document-list">
+          {/* Her belgeyi seçilebilir bir buton olarak gösteriyoruz.
+          Tıklanan belgenin ID'sini parent'a bildiriyoruz. */}
           {documents.map((document) => (
-            <div className="document-item" key={document.id}>
+            <button
+              type="button"
+              key={document.id}
+              // Aktif belgeye görsel olarak farklı stil uyguluyoruz.
+              className={`document-item ${
+                selectedDocumentId === document.id ? 'selected' : ''
+              }`}
+              // Seçilen belgenin ID'sini App'e bildiriyoruz.
+              onClick={() => onSelectDocument(document.id)}
+              aria-pressed={selectedDocumentId === document.id}
+            >
               <div className="document-name">
                 {document.filename}
               </div>
@@ -32,7 +52,7 @@ function Sidebar({ documents }: SidebarProps) {
               <div className={`document-status ${document.status}`}>
                 {document.status}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
