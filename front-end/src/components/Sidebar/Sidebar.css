@@ -1,3 +1,4 @@
+/* Sidebar'ın ana yerleşimi ve içerik boşlukları */
 .sidebar {
   padding: 20px;
   border-right: 1px solid #e5e7eb;
@@ -39,15 +40,40 @@
   color: #6b7280;
 }
 
+/* Belge listesindeki öğeleri dikey olarak düzenler */
 .document-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
+/* Belge seçiminde butonun varsayılan görünümünü sıfırlar */
 .document-item {
+  width: 100%;
   padding: 10px;
+  border: 0;
   border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Hover durumunda öğenin etkileşimli olduğunu gösterir */
+.document-item:hover {
+  background: #f9fafb;
+}
+
+/* Aktif belgenin diğer belgelerden ayırt edilmesini sağlar */
+.document-item.selected {
+  background: #f3f4f6;
+}
+
+/* Klavye ile gezinirken odaklanan öğeyi görünür kılar */
+.document-item:focus-visible {
+  outline: 2px solid #7076fe;
+  outline-offset: 2px;
 }
 
 .document-name {
