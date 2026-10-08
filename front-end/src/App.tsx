@@ -1,107 +1,128 @@
 
 import { useState } from 'react'
 import Sidebar from './components/Sidebar/Sidebar'
+import { initialMockDocuments } from './data/mockDocuments'
+import type { DocumentSummary } from './types/document'
 import './App.css'
 
-type Document = {
-  id: string
-  filename: string
-  status: 'ready' | 'processing' | 'failed'
+const MAX_FILE_SIZE = 20 * 1024 * 1024
+
+type Feedback = {
+  type: 'success' | 'error'
+  title: string
+  message: string
 }
 
-// Backend entegrasyonu olmadığı için şimdilik örnek belgeler kullanıyoruz.
-const mockDocuments: Document[] = [
-  {
-    id: '1',
-    filename: 'AI Research.pdf',
-    status: 'ready',
-  },
-  {
-    id: '2',
-    filename: 'Lecture Notes.txt',
-    status: 'processing',
-  },
-]
-
 function App() {
-  // Kullanıcının seçtiği belgeyi ID üzerinden takip ediyoruz.
+  // Mock belgeleri state içinde yönetiyoruz.
+  const [documents, setDocuments] = useState<DocumentSummary[]>(
+    () => [...initialMockDocuments]
+  )
+
   const [selectedDocumentId, setSelectedDocumentId] =
     useState<string | null>(null)
 
-  // Dosya seçimi ve doğrulama sonucunu arayüzde göstermek için.
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [fileError, setFileError] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
 
-  // Seçili belgeyi mevcut listeden buluyoruz.
-  const selectedDocument = mockDocuments.find(
+  const selectedDocument = documents.find(
     (document) => document.id === selectedDocumentId
   )
 
   const handleFileSelect = (file: File) => {
-    // Dosya uzantısının PDF veya TXT olup olmadığını kontrol ediyoruz.
-    const isValidType = /\.(pdf|txt)$/i.test(file.name)
+    if (isUploading) return
 
-    if (!isValidType) {
-      setSelectedFile(null)
-      setFileError('Only PDF and TXT files are supported.')
+    // Dosya türü ve boyutunu backend kurallarıyla aynı tutuyoruz.
+    if (!/\.(pdf|txt)$/i.test(file.name)) {
+      setFeedback({
+        type: 'error',
+        title: 'Unsupported file type',
+        message: 'Only PDF and TXT files are supported.',
+      })
       return
     }
 
-    // Backend bağlantısı olmadığı için dosyayı henüz yüklemiyoruz.
-    setSelectedFile(file)
-    setFileError(null)
-  }
+    if (file.size === 0) {
+      setFeedback({
+        type: 'error',
+        title: 'Empty file',
+        message: 'Please select a non-empty file.',
+      })
+      return
+    }
 
-  // Kullanıcının bildirim mesajını kapatmasını sağlıyoruz.
-  const dismissFileFeedback = () => {
-    setSelectedFile(null)
-    setFileError(null)
+    if (file.size > MAX_FILE_SIZE) {
+      setFeedback({
+        type: 'error',
+        title: 'File too large',
+        message: 'Maximum file size is 20 MiB.',
+      })
+      return
+    }
+
+    setIsUploading(true)
+    setFeedback(null)
+
+    // Bu belge yalnızca frontend belleğine eklenir; sunucuya yüklenmez.
+    const mockDocument: DocumentSummary = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      mime_type: /\.pdf$/i.test(file.name)
+        ? 'application/pdf'
+        : 'text/plain',
+      status: 'queued',
+      created_at: new Date().toISOString(),
+      processed_at: null,
+      error: null,
+    }
+
+    setDocuments((previous) => [mockDocument, ...previous])
+    setSelectedDocumentId(mockDocument.id)
+    setIsUploading(false)
+
+    setFeedback({
+      type: 'success',
+      title: file.name,
+      message: 'Document added to mock UI. No file was uploaded.',
+    })
   }
 
   return (
     <div className="app">
-      {/* Sidebar'a belgeleri, seçimi ve callback fonksiyonlarını iletiyoruz. */}
       <Sidebar
-        documents={mockDocuments}
+        documents={documents}
         selectedDocumentId={selectedDocumentId}
         onSelectDocument={setSelectedDocumentId}
         onFileSelect={handleFileSelect}
+        isLoading={false}
+        isUploading={isUploading}
       />
 
       <main className="chat-workspace">
         <header className="chat-header">
           <h1>
             {selectedDocument
-              ? selectedDocument.filename
+              ? selectedDocument.name
               : 'Document Chat'}
           </h1>
         </header>
 
-        {/* Dosya seçimi veya hata oluştuğunda geri bildirim gösteriyoruz. */}
-        {(selectedFile || fileError) && (
+        {feedback && (
           <div
-            className={`file-feedback ${fileError ? 'error' : 'success'}`}
-            role={fileError ? 'alert' : 'status'}
+            className={`file-feedback ${feedback.type}`}
+            role={feedback.type === 'error' ? 'alert' : 'status'}
           >
             <div>
-              <strong>
-                {fileError
-                  ? 'Unsupported file type'
-                  : selectedFile?.name}
-              </strong>
-
-              <p>
-                {fileError
-                  ? fileError
-                  : 'File selected. Not uploaded yet.'}
-              </p>
+              <strong>{feedback.title}</strong>
+              <p>{feedback.message}</p>
             </div>
 
             <button
               type="button"
               className="file-feedback-close"
               aria-label="Dismiss file notification"
-              onClick={dismissFileFeedback}
+              onClick={() => setFeedback(null)}
             >
               ×
             </button>
@@ -110,10 +131,36 @@ function App() {
 
         <section className="chat-content">
           <div className="empty-state">
-            <h2>Ask about your documents</h2>
-            <p>
-              Upload a PDF or TXT file to start asking questions.
-            </p>
+            {selectedDocument?.status === 'queued' ? (
+              <>
+                <h2>Processing document</h2>
+                <p>
+                  This is a mock processing state.
+                </p>
+              </>
+            ) : selectedDocument?.status === 'failed' ? (
+              <>
+                <h2>Processing failed</h2>
+                <p>
+                  {selectedDocument.error ??
+                    'The document could not be processed.'}
+                </p>
+              </>
+            ) : selectedDocument?.status === 'ready' ? (
+              <>
+                <h2>Document ready</h2>
+                <p>
+                  This document is ready for the future chat UI.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2>Ask about your documents</h2>
+                <p>
+                  Select a document to get started.
+                </p>
+              </>
+            )}
           </div>
         </section>
       </main>
