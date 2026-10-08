@@ -2,11 +2,10 @@ import hashlib
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from routers.routes import getHealth, listDocs
 from uuid import uuid4, UUID
-from db.db import UPLOADS, connect
-from api.ai import PIPELINE
-from services.worker import Question, digest, event, public_source, prepare, save_answer, stream_answer
+from app.db.db import UPLOADS, connect
+from app.api.ai import PIPELINE, MODE
+from app.services.worker import Question, stream_answer
 
 app = FastAPI(title="DockAI back-end")
 #cors middleware for browser errors because of calls from different ports
@@ -18,7 +17,9 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    getHealth()
+    with connect() as db:
+        db.execute("SELECT 1")
+    return {"status": "ok", "ai_mode": MODE}
 
 #upload a file, checks for mime type (PDF and TXT), max size is 20 MiB, and adds the file into db
 @app.post("/documents", status_code=202)
@@ -56,12 +57,12 @@ def uploadFile(file:UploadFile):
                     VALUES (%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (content_hash,pipeline_version) DO NOTHING
                     RETURNING id,status""",
-                (doc_id, name, size, mime,content_hash.hexdigest(),storage_key, PIPELINE)
+                (doc_id, name, size, mime,content_hash.hexdigest(),storage_key, PIPELINE,)
             ).fetchone()
             if row is None:
                 row = db.execute(
                     "SELECT id,status FROM documents WHERE content_hash=%s AND pipeline_version=%s",
-                    (content_hash.hexdigest(), PIPELINE)
+                    (content_hash.hexdigest(), PIPELINE,)
                 ).fetchone()
         keep_file = row["id"] == doc_id
         return {**row, "duplicate": not keep_file}
@@ -72,7 +73,12 @@ def uploadFile(file:UploadFile):
 
 @app.get("/documents")
 def list_docs():
-    listDocs()
+    with connect() as db:
+        return db.execute(
+            """SELECT id,name,size,mime_type,status,created_at,processed_at,error
+                FROM documents WHERE pipeline_version=%s ORDER BY created_at DESC""",
+            (PIPELINE,),
+        ).fetchall()
 
 #get the document with the given id
 @app.get("/documents/{doc_id}")
@@ -80,7 +86,7 @@ def document(doc_id: UUID):
     with connect() as db:
         row = db.execute(
             """SELECT id,name,size,status,error,created_at,processed_at FROM documents
-               WHERE id=%s AND pipeline_version=%s""", (doc_id, PIPELINE)
+               WHERE id=%s AND pipeline_version=%s""", (doc_id, PIPELINE,)
         ).fetchone()
     if row is None:
         raise HTTPException(404, "Document not found")
@@ -93,7 +99,7 @@ def retry_document(doc_id: UUID):
         row = db.execute(
             """UPDATE documents SET status='queued',error=NULL
                WHERE id=%s AND pipeline_version=%s AND status='failed' RETURNING id,status""",
-            (doc_id, PIPELINE),
+            (doc_id, PIPELINE,),
         ).fetchone()
     if row is None:
         raise HTTPException(409, "No failed document available to retry")

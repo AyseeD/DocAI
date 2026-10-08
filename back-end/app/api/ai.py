@@ -21,10 +21,11 @@ client = ()
 
 #checks whether a given error is a temporary or retryable API error. (Fix this later)
 def transient(error):
-    return True
+    if MODE != "mock":
+        raise ValueError("Only AI_MODE=mock is supported for now")
 
 #embed a given text (for both mock and ai model). (Fix this later)
-@retry(retry=retry_if_exception(transient))
+#@retry(retry=retry_if_exception(transient))
 def embed(text, query=False):
     if MODE == "mock":
         #plumbing only, these vectors do not encode semantic meaning

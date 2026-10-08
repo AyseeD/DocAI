@@ -40,12 +40,12 @@ def prepare(question):
         db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         docs = db.execute(
             """SELECT id,content_hash,processed_at FROM documents
-                WHERE status='ready' AND pipeline_version=%s ORDER BY id""", (PIPELINE)
+                WHERE status='ready' AND pipeline_version=%s ORDER BY id""", (PIPELINE,)
         ).fetchall()
         version = digest(json.dumps(docs, default=str, sort_keys=True))
         cached = db.execute(
             "SELECT * FROM answer_cache WHERE question_key=%s AND doc_set_ver=%s",
-            (key, version),
+            (key, version,),
         ).fetchone()
         if cached:
             rows = db.execute(
@@ -60,7 +60,7 @@ def prepare(question):
         rows = db.execute(
             """SELECT c.*,d.name FROM chunks c JOIN documents d ON d.id=c.doc_id
                 WHERE d.status='ready' AND d.pipeline_version=%s
-                ORDER BY c.embedding <=> %s::vector, c.id LIMIT 5""", (PIPELINE, vector)
+                ORDER BY c.embedding <=> %s::vector, c.id LIMIT 5""", (PIPELINE, vector,)
         ).fetchall()
     return key, version, None, rows 
 
@@ -70,13 +70,13 @@ def save_answer(key, version, answer, sources):
         inserted = db.execute(
             """INSERT INTO answer_cache(id,question_key,doc_set_ver,answer)
                 VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING id""",
-            (uuid4(), key, version, answer)
+            (uuid4(), key, version, answer,)
         ).fetchone()
         if inserted:
             for order, source in enumerate(sources):
                 db.execute(
                     "INSERT INTO answer_cache_chunks VALUES (%s,%s,%s)",
-                    (inserted["id"], source["id"], order)
+                    (inserted["id"], source["id"], order,)
                 )
 
 #A generator for streaming Rag endpoint. (chain of events)
@@ -134,7 +134,7 @@ def stream_answer(question):
                          Jsonb({"generation": usage or (None if generation_called else {"total_token_count": 0}),
                             "generation_called": generation_called,
                             "embedding_tokens": None}),
-                            round((time.monotonic() - start) * 1000), cached is not None, outcome 
+                            round((time.monotonic() - start) * 1000), cached is not None, outcome ,
                         )
                 )
         except Exception:
@@ -187,7 +187,7 @@ def process_one():
                             (id, doc_id, content, chunk_order, page_number, embedding)
                             VALUES (%s, %s, %s, %s, %s, %s::vector)""",
                             (uuid4(), doc["id"], content, order, page,
-                             vector_literal(embed(content))),
+                             vector_literal(embed(content)),),
                     )
                 db.execute(
                     "UPDATE documents SET status='ready', processed_at=now(), error=NULL WHERE id=%s",
