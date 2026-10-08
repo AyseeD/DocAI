@@ -23,14 +23,14 @@ function Sidebar({
   onSelectDocument,
   onFileSelect,
 }: SidebarProps) {
-  // Gizli dosya input'una programatik olarak erişiyoruz.
+  // Gizli dosya input'una erişmek için ref kullanıyoruz.
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">DocAI</div>
 
-      {/* Özel tasarlanmış butonla dosya seçiciyi açıyoruz. */}
+      {/* Özel butonumuz üzerinden dosya seçme penceresini açıyoruz. */}
       <button
         type="button"
         className="add-document-button"
@@ -39,7 +39,7 @@ function Sidebar({
         + Add document
       </button>
 
-      {/* Seçilen dosyayı doğrulama için App'e iletiyoruz. */}
+      {/* Seçilen dosyayı App'e iletiyoruz. */}
       <input
         ref={fileInputRef}
         type="file"
@@ -52,7 +52,7 @@ function Sidebar({
             onFileSelect(file)
           }
 
-          // Aynı dosyanın yeniden seçilmesini algılıyoruz.
+          // Aynı dosyanın tekrar seçilmesini algılayabilmek için.
           event.target.value = ''
         }}
       />
@@ -61,7 +61,7 @@ function Sidebar({
         <h2>Documents</h2>
 
         <div className="document-list">
-          {/* Her belge için seçilebilir bir buton oluşturuyoruz. */}
+          {/* Belgeleri seçilebilir butonlar olarak oluşturuyoruz. */}
           {documents.map((document) => {
             const isSelected = selectedDocumentId === document.id
 
@@ -79,9 +79,7 @@ function Sidebar({
                   {document.filename}
                 </div>
 
-                <div
-                  className={`document-status ${document.status}`}
-                >
+                <div className={`document-status ${document.status}`}>
                   {document.status}
                 </div>
               </button>
