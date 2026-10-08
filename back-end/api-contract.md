@@ -15,6 +15,7 @@
 - **Statuses:** `queued | ready | failed` are persisted backend statuses. `selected`, `uploading`, and `streaming` are frontend-only UI states.
 - **Authentication:** Not included in the current single-user prototype. Do not deploy to a multi-user environment without authorization and document ownership checks.
 - **Error shape:** Explicit `HTTPException` responses use FastAPI's `{"detail": "message"}`. Framework validation errors (HTTP 422) use a structured `detail` array; unexpected server errors must not be assumed to have a fixed shape.
+- **Frontend API configuration:** The API base URL is configured through VITE_API_BASE_URL, with http://localhost:8000 as the local development default. Do not store secrets in Vite environment variables.
 
 ## 2. Endpoints currently declared in backend code
 
@@ -171,6 +172,7 @@ data: {"message":"Answer failed. Discard partial text and retry."}
 - The streaming event schema remains the same. Every returned `sources[].doc_id` must match the requested document ID.
 - Changing selected documents in the UI cancels the prior stream and clears or separates previous conversation state.
 - **No frontend-only filtering workaround:** Filtering returned sources cannot correct an answer already generated using another document.
+- The selected document ID is the source of truth for the chat context. A question must never be submitted without an explicitly selected, ready document.
 
 ### Proposed backend change locations
 
@@ -251,6 +253,8 @@ Keep API response shapes distinct from UI-only state (`selectedFile`, `uploading
 - [ ] Stream SSE, map citations, handle `error` and missing `done`, support abort/retry.
 - [ ] Show cache hit and generation usage only when supplied; never fabricate cost or token counts.
 - [ ] Test invalid/empty/oversized files, duplicates, backend unavailable, processing failures, no sources, and interrupted streams.
+- [ ] Support cancelling an in-flight upload with AbortController. Cancellation stops the browser request but does not guarantee that the backend has not already stored the document.
+- [ ] Test malformed API responses, invalid document IDs, and unexpected document status values.
 
 ## 6. Open decisions / approval checklist
 
