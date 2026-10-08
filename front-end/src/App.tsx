@@ -33,6 +33,20 @@ function App() {
     (document) => document.id === selectedDocumentId
   )
 
+  const handleFileSelect = (file: File) => {
+    // Dosya uzantısını kontrol ediyoruz.
+    const isValidType = /\.(pdf|txt)$/i.test(file.name)
+
+    if (!isValidType) {
+      window.alert('Only PDF and TXT files are supported.')
+      return
+    }
+
+    // Backend bağlantısı henüz olmadığı için
+    // dosyayı yalnızca frontend tarafında doğruluyoruz.
+    window.alert(`Selected file: ${file.name}`)
+  }
+
   return (
     <div className="app">
       {/* Sidebar'a mevcut belge verilerini ve seçim bilgisini
@@ -41,6 +55,7 @@ function App() {
         documents={mockDocuments}
         selectedDocumentId={selectedDocumentId}
         onSelectDocument={setSelectedDocumentId}
+        onFileSelect={handleFileSelect}
       />
 
       <main className="chat-workspace">
