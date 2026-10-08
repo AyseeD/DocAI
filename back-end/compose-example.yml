@@ -18,6 +18,36 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    build: .
+    env_file: .env
+    environment: &app_environment
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: #db name
+      PGUSER: #pg user name
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      UPLOAD_DIR: /data/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.services.worker"]
+    env_file: .env
+    environment: *app_environment
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
   uploads:
