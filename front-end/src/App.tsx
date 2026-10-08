@@ -6,6 +6,7 @@ import ChatWindow from './components/Chat/ChatWindow'
 import { loadMockState, saveMockState } from './data/mockStorage'
 import type { DocumentSummary } from './types/document'
 import type { ChatMessage } from './types/chat'
+import HomeWorkspace from './components/Home/HomeWorkspace'
 import './App.css'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
@@ -273,7 +274,7 @@ function App() {
           <h1>
             {selectedDocument
               ? selectedDocument.name
-              : 'Document Chat'}
+              : 'Workspace'}
           </h1>
         </header>
 
@@ -298,20 +299,33 @@ function App() {
           </div>
         )}
 
-        <ChatWindow
-          messages={currentMessages}
-          document={selectedDocument ?? null}
-          isLoading={isCurrentDocumentLoading}
-          isStreaming={isCurrentDocumentStreaming}
-        />
 
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          disabled={
-            selectedDocument?.status !== 'ready' ||
-            responsePhase !== 'idle'
-          }
-        />
+        {selectedDocumentId === null ? (
+          <HomeWorkspace
+            onFileSelect={handleFileSelect}
+            isUploading={isUploading}
+          />
+        ) : (
+          <>
+            <ChatWindow
+              messages={currentMessages}
+              document={selectedDocument ?? null}
+              isLoading={isCurrentDocumentLoading}
+              isStreaming={isCurrentDocumentStreaming}
+            />
+
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              onFileSelect={handleFileSelect}
+              isUploading={isUploading}
+              disabled={
+                selectedDocument?.status !== 'ready' ||
+                responsePhase !== 'idle'
+              }
+            />
+          </>
+        )}
+
       </main>
     </div>
   )
