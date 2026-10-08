@@ -1,6 +1,7 @@
 
 import { useEffect, useRef } from 'react'
 import ChatMessage from './ChatMessage'
+import ChatLoading from './ChatLoading'
 import type { ChatMessage as ChatMessageType } from '../../types/chat'
 import type { DocumentSummary } from '../../types/document'
 import './ChatWindow.css'
@@ -8,19 +9,26 @@ import './ChatWindow.css'
 type ChatWindowProps = {
   messages: ChatMessageType[]
   document: DocumentSummary | null
+  isLoading: boolean
+  isStreaming: boolean
 }
 
-function ChatWindow({ messages, document }: ChatWindowProps) {
+function ChatWindow({
+  messages,
+  document,
+  isLoading,
+  isStreaming,
+}: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Yeni mesaj geldiğinde sohbetin sonuna kaydırıyoruz.
   useEffect(() => {
-    if (messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length > 0 || isLoading) {
+      bottomRef.current?.scrollIntoView({
+        behavior: isStreaming ? 'instant' : 'smooth',
+      })
     }
-  }, [messages])
+  }, [messages, isLoading, isStreaming])
 
-  // Seçili belgeye göre empty state içeriğini belirliyoruz.
   const getEmptyState = () => {
     if (!document) {
       return {
@@ -46,17 +54,17 @@ function ChatWindow({ messages, document }: ChatWindowProps) {
         return {
           title: 'Document processing failed',
           description:
-            document.error ??
-            "This document couldn't be processed.",
+            document.error ?? "This document couldn't be processed.",
         }
     }
   }
 
   const emptyState = getEmptyState()
+  const showConversation = messages.length > 0 || isLoading
 
   return (
     <section className="chat-window">
-      {messages.length === 0 ? (
+      {!showConversation ? (
         <div className="chat-window-empty">
           <h2>{emptyState.title}</h2>
           <p>{emptyState.description}</p>
@@ -66,6 +74,9 @@ function ChatWindow({ messages, document }: ChatWindowProps) {
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
           ))}
+
+          {isLoading && <ChatLoading />}
+
           <div ref={bottomRef} />
         </div>
       )}

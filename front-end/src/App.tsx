@@ -10,6 +10,13 @@ import './App.css'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 const MOCK_PROCESSING_DELAY = 2000
+const MOCK_THINKING_DELAY = 1000
+const MOCK_STREAM_INTERVAL = 60
+
+const MOCK_ANSWER =
+  'This is a mock AI response for UI testing. ' +
+  'The document content has not been analyzed yet. ' +
+  'Real answers and citations will be available after backend integration.'
 
 type Feedback = {
   type: 'success' | 'error'
@@ -18,7 +25,6 @@ type Feedback = {
 }
 
 function App() {
-  // Storage'ı başlangıçta yalnızca bir kez okuyoruz.
   const [initialState] = useState(loadMockState)
 
   const [documents, setDocuments] = useState<DocumentSummary[]>(
@@ -35,9 +41,20 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
-  const processingTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+  // Yanıt üretilen belgeyi takip ediyoruz.
+  const [respondingDocumentId, setRespondingDocumentId] =
+    useState<string | null>(null)
 
-  // Belgeler, seçim veya mesajlar değiştiğinde storage'ı günceller.
+  const [responsePhase, setResponsePhase] = useState<
+    'idle' | 'loading' | 'streaming'
+  >('idle')
+
+  // Aynı anda ikinci yanıtın başlatılmasını engeller.
+  const responseInProgressRef = useRef(false)
+
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  const streamInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+
   useEffect(() => {
     saveMockState({
       documents,
@@ -48,7 +65,11 @@ function App() {
 
   useEffect(() => {
     return () => {
-      processingTimers.current.forEach(clearTimeout)
+      timers.current.forEach(clearTimeout)
+
+      if (streamInterval.current !== null) {
+        clearInterval(streamInterval.current)
+      }
     }
   }, [])
 
@@ -59,14 +80,19 @@ function App() {
   const currentMessages = selectedDocumentId
     ? messagesByDocument[selectedDocumentId] ?? []
     : []
-  
+
+  const isCurrentDocumentLoading =
+    respondingDocumentId === selectedDocumentId &&
+    responsePhase === 'loading'
+
+  const isCurrentDocumentStreaming =
+    respondingDocumentId === selectedDocumentId &&
+    responsePhase === 'streaming'
+
   const handleGoHome = () => {
-    // Yalnızca aktif belge seçimini kaldırıyoruz.
-    // Belgeler ve sohbet geçmişi korunuyor.
     setSelectedDocumentId(null)
     setFeedback(null)
   }
-
 
   const handleFileSelect = (file: File) => {
     if (isUploading) return
@@ -101,7 +127,6 @@ function App() {
     setIsUploading(true)
     setFeedback(null)
 
-    // Gerçek dosya değil, yalnızca mock belge bilgileri saklanır.
     const mockDocument: DocumentSummary = {
       id: crypto.randomUUID(),
       name: file.name,
@@ -125,7 +150,6 @@ function App() {
       message: 'Mock document added. No file was uploaded.',
     })
 
-    // İşleme sürecini yalnızca frontend üzerinde simüle eder.
     const timer = setTimeout(() => {
       setDocuments((previous) =>
         previous.map((document) =>
@@ -140,15 +164,22 @@ function App() {
       )
     }, MOCK_PROCESSING_DELAY)
 
-    processingTimers.current.push(timer)
+    timers.current.push(timer)
   }
 
   const handleSendMessage = (message: string) => {
-    if (!selectedDocument || selectedDocument.status !== 'ready') {
+    if (
+      !selectedDocument ||
+      selectedDocument.status !== 'ready' ||
+      responseInProgressRef.current
+    ) {
       return
     }
 
+    responseInProgressRef.current = true
+
     const documentId = selectedDocument.id
+    const assistantMessageId = crypto.randomUUID()
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -157,24 +188,72 @@ function App() {
       createdAt: new Date().toISOString(),
     }
 
-    const mockAnswer: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content:
-        'This is a mock AI response for UI testing. ' +
-        'The document content has not been analyzed yet. ' +
-        'Real answers and citations will be available after backend integration.',
-      createdAt: new Date().toISOString(),
-    }
-
     setMessagesByDocument((previous) => ({
       ...previous,
       [documentId]: [
         ...(previous[documentId] ?? []),
         userMessage,
-        mockAnswer,
       ],
     }))
+
+    setRespondingDocumentId(documentId)
+    setResponsePhase('loading')
+
+    // Kısa bir bekleme sonrasında mock streaming başlar.
+    const thinkingTimer = setTimeout(() => {
+      const assistantMessage: ChatMessage = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      }
+
+      setMessagesByDocument((previous) => ({
+        ...previous,
+        [documentId]: [
+          ...(previous[documentId] ?? []),
+          assistantMessage,
+        ],
+      }))
+
+      setResponsePhase('streaming')
+
+      // Metni kelimelere ayırarak parça parça ekliyoruz.
+      const chunks = MOCK_ANSWER.match(/\S+\s*/g) ?? []
+      let chunkIndex = 0
+
+      streamInterval.current = setInterval(() => {
+        if (chunkIndex >= chunks.length) {
+          if (streamInterval.current !== null) {
+            clearInterval(streamInterval.current)
+            streamInterval.current = null
+          }
+
+          responseInProgressRef.current = false
+          setResponsePhase('idle')
+          setRespondingDocumentId(null)
+          return
+        }
+
+        const chunk = chunks[chunkIndex]
+        chunkIndex += 1
+
+        setMessagesByDocument((previous) => ({
+          ...previous,
+          [documentId]: (previous[documentId] ?? []).map(
+            (existingMessage) =>
+              existingMessage.id === assistantMessageId
+                ? {
+                    ...existingMessage,
+                    content: existingMessage.content + chunk,
+                  }
+                : existingMessage
+          ),
+        }))
+      }, MOCK_STREAM_INTERVAL)
+    }, MOCK_THINKING_DELAY)
+
+    timers.current.push(thinkingTimer)
   }
 
   return (
@@ -222,11 +301,16 @@ function App() {
         <ChatWindow
           messages={currentMessages}
           document={selectedDocument ?? null}
+          isLoading={isCurrentDocumentLoading}
+          isStreaming={isCurrentDocumentStreaming}
         />
 
         <ChatInput
           onSendMessage={handleSendMessage}
-          disabled={selectedDocument?.status !== 'ready'}
+          disabled={
+            selectedDocument?.status !== 'ready' ||
+            responsePhase !== 'idle'
+          }
         />
       </main>
     </div>
