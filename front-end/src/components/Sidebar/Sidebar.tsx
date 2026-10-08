@@ -7,6 +7,7 @@ type SidebarProps = {
   documents: DocumentSummary[]
   selectedDocumentId: string | null
   onSelectDocument: (documentId: string) => void
+  onGoHome: () => void
   onFileSelect: (file: File) => void
   isLoading: boolean
   isUploading: boolean
@@ -16,6 +17,7 @@ function Sidebar({
   documents,
   selectedDocumentId,
   onSelectDocument,
+  onGoHome,
   onFileSelect,
   isLoading,
   isUploading,
@@ -25,6 +27,21 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">DocAI</div>
+
+      {/* Home: Belge seçimini kaldırır, verileri silmez. */}
+      <button
+        type="button"
+        className={`sidebar-home-button ${
+          selectedDocumentId === null ? 'active' : ''
+        }`}
+        onClick={onGoHome}
+        aria-current={
+          selectedDocumentId === null ? 'page' : undefined
+        }
+      >
+        <span aria-hidden="true">⌂</span>
+        <span>Home</span>
+      </button>
 
       <button
         type="button"
@@ -48,7 +65,6 @@ function Sidebar({
             onFileSelect(file)
           }
 
-          // Aynı dosyanın tekrar seçilebilmesini sağlar.
           event.target.value = ''
         }}
       />

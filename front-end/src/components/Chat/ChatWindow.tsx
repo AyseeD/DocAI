@@ -2,17 +2,15 @@
 import { useEffect, useRef } from 'react'
 import ChatMessage from './ChatMessage'
 import type { ChatMessage as ChatMessageType } from '../../types/chat'
+import type { DocumentSummary } from '../../types/document'
 import './ChatWindow.css'
 
 type ChatWindowProps = {
   messages: ChatMessageType[]
-  documentName: string | null
+  document: DocumentSummary | null
 }
 
-function ChatWindow({
-  messages,
-  documentName,
-}: ChatWindowProps) {
+function ChatWindow({ messages, document }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Yeni mesaj geldiğinde sohbetin sonuna kaydırıyoruz.
@@ -22,20 +20,46 @@ function ChatWindow({
     }
   }, [messages])
 
+  // Seçili belgeye göre empty state içeriğini belirliyoruz.
+  const getEmptyState = () => {
+    if (!document) {
+      return {
+        title: 'Ask about your documents',
+        description: 'Select a document to get started.',
+      }
+    }
+
+    switch (document.status) {
+      case 'queued':
+        return {
+          title: 'Preparing your document',
+          description: `${document.name} is being processed. Please wait.`,
+        }
+
+      case 'ready':
+        return {
+          title: `Chat with ${document.name}`,
+          description: 'Ask a question to start the conversation.',
+        }
+
+      case 'failed':
+        return {
+          title: 'Document processing failed',
+          description:
+            document.error ??
+            "This document couldn't be processed.",
+        }
+    }
+  }
+
+  const emptyState = getEmptyState()
+
   return (
     <section className="chat-window">
       {messages.length === 0 ? (
         <div className="chat-window-empty">
-          <h2>
-            {documentName
-              ? `Chat with ${documentName}`
-              : 'Ask about your documents'}
-          </h2>
-          <p>
-            {documentName
-              ? 'Ask a question to start the conversation.'
-              : 'Select a ready document to get started.'}
-          </p>
+          <h2>{emptyState.title}</h2>
+          <p>{emptyState.description}</p>
         </div>
       ) : (
         <div className="chat-messages">

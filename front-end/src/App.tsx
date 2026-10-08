@@ -59,6 +59,14 @@ function App() {
   const currentMessages = selectedDocumentId
     ? messagesByDocument[selectedDocumentId] ?? []
     : []
+  
+  const handleGoHome = () => {
+    // Yalnızca aktif belge seçimini kaldırıyoruz.
+    // Belgeler ve sohbet geçmişi korunuyor.
+    setSelectedDocumentId(null)
+    setFeedback(null)
+  }
+
 
   const handleFileSelect = (file: File) => {
     if (isUploading) return
@@ -175,6 +183,7 @@ function App() {
         documents={documents}
         selectedDocumentId={selectedDocumentId}
         onSelectDocument={setSelectedDocumentId}
+        onGoHome={handleGoHome}
         onFileSelect={handleFileSelect}
         isLoading={false}
         isUploading={isUploading}
@@ -212,24 +221,8 @@ function App() {
 
         <ChatWindow
           messages={currentMessages}
-          documentName={
-            selectedDocument?.status === 'ready'
-              ? selectedDocument.name
-              : null
-          }
+          document={selectedDocument ?? null}
         />
-
-        {selectedDocument?.status === 'queued' && (
-          <p className="chat-status-notice">
-            Processing document...
-          </p>
-        )}
-
-        {selectedDocument?.status === 'failed' && (
-          <p className="chat-status-notice">
-            {selectedDocument.error ?? 'Document processing failed.'}
-          </p>
-        )}
 
         <ChatInput
           onSendMessage={handleSendMessage}
