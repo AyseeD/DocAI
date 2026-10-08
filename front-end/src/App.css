@@ -102,3 +102,33 @@
   outline: 2px solid #7076fe;
   outline-offset: 3px;
 }
+
+
+/* Chat alanını dikey yerleşimde tutar. */
+.chat-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100vh;
+}
+
+/* ChatWindow kalan alanı doldurur. */
+.chat-window {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Input alanının ekran kenarına yapışmasını önler. */
+.chat-input-form {
+  flex-shrink: 0;
+  margin: 0 auto 24px;
+  box-sizing: border-box;
+}
+
+/* Belge işlenirken durum bilgisini gösterir. */
+.chat-status-notice {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin: 8px 0 16px;
+}

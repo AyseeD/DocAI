@@ -1,11 +1,15 @@
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar/Sidebar'
-import { initialMockDocuments } from './data/mockDocuments'
+import ChatInput from './components/Chat/ChatInput'
+import ChatWindow from './components/Chat/ChatWindow'
+import { loadMockState, saveMockState } from './data/mockStorage'
 import type { DocumentSummary } from './types/document'
+import type { ChatMessage } from './types/chat'
 import './App.css'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
+const MOCK_PROCESSING_DELAY = 2000
 
 type Feedback = {
   type: 'success' | 'error'
@@ -14,25 +18,51 @@ type Feedback = {
 }
 
 function App() {
-  // Mock belgeleri state içinde yönetiyoruz.
+  // Storage'ı başlangıçta yalnızca bir kez okuyoruz.
+  const [initialState] = useState(loadMockState)
+
   const [documents, setDocuments] = useState<DocumentSummary[]>(
-    () => [...initialMockDocuments]
+    initialState.documents
   )
 
   const [selectedDocumentId, setSelectedDocumentId] =
-    useState<string | null>(null)
+    useState<string | null>(initialState.selectedDocumentId)
+
+  const [messagesByDocument, setMessagesByDocument] = useState<
+    Record<string, ChatMessage[]>
+  >(initialState.messagesByDocument)
 
   const [isUploading, setIsUploading] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+
+  const processingTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  // Belgeler, seçim veya mesajlar değiştiğinde storage'ı günceller.
+  useEffect(() => {
+    saveMockState({
+      documents,
+      selectedDocumentId,
+      messagesByDocument,
+    })
+  }, [documents, selectedDocumentId, messagesByDocument])
+
+  useEffect(() => {
+    return () => {
+      processingTimers.current.forEach(clearTimeout)
+    }
+  }, [])
 
   const selectedDocument = documents.find(
     (document) => document.id === selectedDocumentId
   )
 
+  const currentMessages = selectedDocumentId
+    ? messagesByDocument[selectedDocumentId] ?? []
+    : []
+
   const handleFileSelect = (file: File) => {
     if (isUploading) return
 
-    // Dosya türü ve boyutunu backend kurallarıyla aynı tutuyoruz.
     if (!/\.(pdf|txt)$/i.test(file.name)) {
       setFeedback({
         type: 'error',
@@ -63,7 +93,7 @@ function App() {
     setIsUploading(true)
     setFeedback(null)
 
-    // Bu belge yalnızca frontend belleğine eklenir; sunucuya yüklenmez.
+    // Gerçek dosya değil, yalnızca mock belge bilgileri saklanır.
     const mockDocument: DocumentSummary = {
       id: crypto.randomUUID(),
       name: file.name,
@@ -84,8 +114,59 @@ function App() {
     setFeedback({
       type: 'success',
       title: file.name,
-      message: 'Document added to mock UI. No file was uploaded.',
+      message: 'Mock document added. No file was uploaded.',
     })
+
+    // İşleme sürecini yalnızca frontend üzerinde simüle eder.
+    const timer = setTimeout(() => {
+      setDocuments((previous) =>
+        previous.map((document) =>
+          document.id === mockDocument.id
+            ? {
+                ...document,
+                status: 'ready',
+                processed_at: new Date().toISOString(),
+              }
+            : document
+        )
+      )
+    }, MOCK_PROCESSING_DELAY)
+
+    processingTimers.current.push(timer)
+  }
+
+  const handleSendMessage = (message: string) => {
+    if (!selectedDocument || selectedDocument.status !== 'ready') {
+      return
+    }
+
+    const documentId = selectedDocument.id
+
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: message,
+      createdAt: new Date().toISOString(),
+    }
+
+    const mockAnswer: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content:
+        'This is a mock AI response for UI testing. ' +
+        'The document content has not been analyzed yet. ' +
+        'Real answers and citations will be available after backend integration.',
+      createdAt: new Date().toISOString(),
+    }
+
+    setMessagesByDocument((previous) => ({
+      ...previous,
+      [documentId]: [
+        ...(previous[documentId] ?? []),
+        userMessage,
+        mockAnswer,
+      ],
+    }))
   }
 
   return (
@@ -129,40 +210,31 @@ function App() {
           </div>
         )}
 
-        <section className="chat-content">
-          <div className="empty-state">
-            {selectedDocument?.status === 'queued' ? (
-              <>
-                <h2>Processing document</h2>
-                <p>
-                  This is a mock processing state.
-                </p>
-              </>
-            ) : selectedDocument?.status === 'failed' ? (
-              <>
-                <h2>Processing failed</h2>
-                <p>
-                  {selectedDocument.error ??
-                    'The document could not be processed.'}
-                </p>
-              </>
-            ) : selectedDocument?.status === 'ready' ? (
-              <>
-                <h2>Document ready</h2>
-                <p>
-                  This document is ready for the future chat UI.
-                </p>
-              </>
-            ) : (
-              <>
-                <h2>Ask about your documents</h2>
-                <p>
-                  Select a document to get started.
-                </p>
-              </>
-            )}
-          </div>
-        </section>
+        <ChatWindow
+          messages={currentMessages}
+          documentName={
+            selectedDocument?.status === 'ready'
+              ? selectedDocument.name
+              : null
+          }
+        />
+
+        {selectedDocument?.status === 'queued' && (
+          <p className="chat-status-notice">
+            Processing document...
+          </p>
+        )}
+
+        {selectedDocument?.status === 'failed' && (
+          <p className="chat-status-notice">
+            {selectedDocument.error ?? 'Document processing failed.'}
+          </p>
+        )}
+
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          disabled={selectedDocument?.status !== 'ready'}
+        />
       </main>
     </div>
   )
