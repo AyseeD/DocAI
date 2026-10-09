@@ -1,0 +1,148 @@
+
+.chat-input-form {
+  width: calc(100% - 40px);
+  max-width: 760px;
+  margin: 0 auto 24px;
+  padding: 14px 16px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background: #ffffff;
+  box-sizing: border-box;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.chat-input-form:focus-within {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+}
+
+.chat-input-textarea {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.chat-input-textarea::placeholder {
+  color: #9ca3af;
+}
+
+.chat-input-textarea:disabled {
+  cursor: not-allowed;
+}
+
+.chat-input-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.chat-input-hint {
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+/* Send button */
+.chat-send-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: #111827;
+  color: #ffffff;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.chat-send-button svg {
+  display: block;
+}
+
+.chat-send-button:hover:not(:disabled) {
+  background: #374151;
+  transform: translateY(-1px);
+}
+
+.chat-send-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.chat-send-button:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.chat-send-button:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .chat-input-hint {
+    font-size: 10px;
+  }
+}
+
+
+.chat-input-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chat-attach-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #4b5563;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.chat-attach-button:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.chat-attach-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-attach-button:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.home-chat-input {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}

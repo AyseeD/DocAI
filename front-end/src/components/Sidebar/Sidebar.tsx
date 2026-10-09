@@ -1,50 +1,63 @@
 
 import { useRef } from 'react'
+import type { DocumentSummary } from '../../types/document'
 import './Sidebar.css'
 
-// Sidebar'ın kullanacağı belge veri yapısı.
-type Document = {
-  id: string
-  filename: string
-  status: 'ready' | 'processing' | 'failed'
-}
-
-// Parent component'ten alınan veriler ve callback fonksiyonları.
 type SidebarProps = {
-  documents: Document[]
+  documents: DocumentSummary[]
   selectedDocumentId: string | null
   onSelectDocument: (documentId: string) => void
+  onGoHome: () => void
   onFileSelect: (file: File) => void
+  isLoading: boolean
+  isUploading: boolean
 }
 
 function Sidebar({
   documents,
   selectedDocumentId,
   onSelectDocument,
+  onGoHome,
   onFileSelect,
+  isLoading,
+  isUploading,
 }: SidebarProps) {
-  // Gizli dosya input'una programatik olarak erişiyoruz.
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">DocAI</div>
 
-      {/* Özel tasarlanmış butonla dosya seçiciyi açıyoruz. */}
+      {/* Home: Belge seçimini kaldırır, verileri silmez. */}
+      <button
+        type="button"
+        className={`sidebar-home-button ${
+          selectedDocumentId === null ? 'active' : ''
+        }`}
+        onClick={onGoHome}
+        aria-current={
+          selectedDocumentId === null ? 'page' : undefined
+        }
+      >
+        <span aria-hidden="true">⌂</span>
+        <span>Home</span>
+      </button>
+
       <button
         type="button"
         className="add-document-button"
         onClick={() => fileInputRef.current?.click()}
+        disabled={isUploading}
       >
-        + Add document
+        {isUploading ? 'Uploading...' : '+ Add document'}
       </button>
 
-      {/* Seçilen dosyayı doğrulama için App'e iletiyoruz. */}
       <input
         ref={fileInputRef}
         type="file"
         accept=".pdf,.txt"
         hidden
+        disabled={isUploading}
         onChange={(event) => {
           const file = event.target.files?.[0]
 
@@ -52,7 +65,6 @@ function Sidebar({
             onFileSelect(file)
           }
 
-          // Aynı dosyanın yeniden seçilmesini algılıyoruz.
           event.target.value = ''
         }}
       />
@@ -61,7 +73,18 @@ function Sidebar({
         <h2>Documents</h2>
 
         <div className="document-list">
-          {/* Her belge için seçilebilir bir buton oluşturuyoruz. */}
+          {isLoading && (
+            <p className="document-list-message">
+              Loading documents...
+            </p>
+          )}
+
+          {!isLoading && documents.length === 0 && (
+            <p className="document-list-message">
+              No documents yet.
+            </p>
+          )}
+
           {documents.map((document) => {
             const isSelected = selectedDocumentId === document.id
 
@@ -76,13 +99,15 @@ function Sidebar({
                 aria-pressed={isSelected}
               >
                 <div className="document-name">
-                  {document.filename}
+                  {document.name}
                 </div>
 
                 <div
                   className={`document-status ${document.status}`}
                 >
-                  {document.status}
+                  {document.status === 'queued'
+                    ? 'processing'
+                    : document.status}
                 </div>
               </button>
             )
