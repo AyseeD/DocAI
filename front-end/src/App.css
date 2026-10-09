@@ -1,59 +1,134 @@
+
 .app {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 225px minmax(0, 1fr);
   min-height: 100vh;
-}
-
-.sidebar {
-  border-right: 1px solid #e5e7eb;
-  padding: 20px;
-}
-
-.logo {
-  font-size: 18px;
-  font-weight: 600;
+  background: #ffffff;
 }
 
 .chat-workspace {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 100vh;
 }
 
 .chat-header {
-  height: 64px;
   display: flex;
   align-items: center;
-  padding: 0 32px;
+  min-height: 58px;
+  padding: 0 28px;
   border-bottom: 1px solid #e5e7eb;
 }
 
 .chat-header h1 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .chat-content {
-  flex: 1;
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: 24px;
 }
 
 .empty-state {
-  max-width: 480px;
   text-align: center;
 }
 
 .empty-state h2 {
-  margin: 0 0 8px;
-  font-size: 28px;
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .empty-state p {
   margin: 0;
+  font-size: 14px;
   color: #6b7280;
-  line-height: 1.6;
+}
+
+/* Dosya seçimi ve doğrulama sonucunu gösteren bildirim. */
+.file-feedback {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 24px;
+  padding: 14px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.file-feedback.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.file-feedback.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.file-feedback strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.file-feedback p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.file-feedback-close {
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-feedback-close:hover {
+  color: #111827;
+}
+
+.file-feedback-close:focus-visible {
+  outline: 2px solid #7076fe;
+  outline-offset: 3px;
+}
+
+
+/* Chat alanını dikey yerleşimde tutar. */
+.chat-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100vh;
+}
+
+/* ChatWindow kalan alanı doldurur. */
+.chat-window {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Input alanının ekran kenarına yapışmasını önler. */
+.chat-input-form {
+  flex-shrink: 0;
+  margin: 0 auto 24px;
+  box-sizing: border-box;
+}
+
+/* Belge işlenirken durum bilgisini gösterir. */
+.chat-status-notice {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin: 8px 0 16px;
 }
