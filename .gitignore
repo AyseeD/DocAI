@@ -32,3 +32,5 @@ docs
 
 package-lock.json
 compose.yml
+
+evaluation/

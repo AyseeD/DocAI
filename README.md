@@ -27,3 +27,7 @@ cd back-end
 cp .env.example .env #to copy the env example into an actual .env file (skip if already exists )
 docker compose up --build -d
 ```
+Run before starting API/worker: 
+```bash
+python -m app.db.migrate
+```

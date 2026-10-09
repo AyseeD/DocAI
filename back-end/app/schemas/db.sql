@@ -28,6 +28,7 @@ CREATE TABLE chunks (
 
 CREATE TABLE answer_cache (
     id uuid PRIMARY KEY,
+    document_id uuid REFERENCES documents(id) ON DELETE CASCADE,
     question_key text NOT NULL,
     doc_set_ver text NOT NULL,
     answer text NOT NULL,
@@ -45,6 +46,7 @@ CREATE TABLE answer_cache_chunks (
 
 CREATE TABLE query_logs (
     id uuid PRIMARY KEY,
+    document_id uuid REFERENCES documents(id) ON DELETE SET NULL,
     question text NOT NULL,
     model text NOT NULL,
     token_usage jsonb NOT NULL,

@@ -1,19 +1,17 @@
-version: "3.9"
-
 services:
   db:
-    image: # name of image
+    image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: #postgres user
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: #db name
+      POSTGRES_DB: docai
     ports:
       - "5555:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./app/schemas/db.sql:/docker-entrypoint-initdb.d/db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U name-of-database"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d docai"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -24,14 +22,25 @@ services:
     environment: &app_environment
       PGHOST: db
       PGPORT: 5432
-      PGDATABASE: #db name
-      PGUSER: #pg user name
+      PGDATABASE: docai
+      PGUSER: postgres
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       UPLOAD_DIR: /data/uploads
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    build: .
+    command: ["python", "-m", "app.db.migrate"]
+    env_file: .env
+    environment: *app_environment
     depends_on:
       db:
         condition: service_healthy
@@ -46,6 +55,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
