@@ -1,0 +1,140 @@
+
+.source-cards {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  white-space: normal;
+}
+
+.source-cards-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.source-cards-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.source-cards-count {
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.source-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-card {
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.source-card:hover {
+  border-color: #d1d5db;
+}
+
+.source-card.expanded {
+  border-color: #d1d5db;
+  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.04);
+}
+
+.source-card-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.source-card-trigger:focus-visible {
+  outline: 2px solid #7076fe;
+  outline-offset: -3px;
+}
+
+.source-card-number {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.source-card-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.source-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.source-card-meta {
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.source-card-chevron {
+  flex-shrink: 0;
+  color: #9ca3af;
+  transition: transform 0.2s ease;
+}
+
+.source-card.expanded .source-card-chevron {
+  transform: rotate(180deg);
+}
+
+.source-card-content {
+  padding: 14px;
+  border-top: 1px solid #f3f4f6;
+  background: #fafafa;
+}
+
+.source-card-content-label {
+  margin-bottom: 8px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.source-card-content p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

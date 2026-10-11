@@ -3,21 +3,22 @@ import { useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar/Sidebar'
 import ChatInput from './components/Chat/ChatInput'
 import ChatWindow from './components/Chat/ChatWindow'
+import HomeWorkspace from './components/Home/HomeWorkspace'
 import { loadMockState, saveMockState } from './data/mockStorage'
+import {
+  getDocuments,
+  uploadDocument,
+} from './services/documentService'
+import {
+  streamQuestion,
+  type Source,
+} from './services/questionService'
 import type { DocumentSummary } from './types/document'
 import type { ChatMessage } from './types/chat'
-import HomeWorkspace from './components/Home/HomeWorkspace'
 import './App.css'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
-const MOCK_PROCESSING_DELAY = 2000
-const MOCK_THINKING_DELAY = 1000
-const MOCK_STREAM_INTERVAL = 60
-
-const MOCK_ANSWER =
-  'This is a mock AI response for UI testing. ' +
-  'The document content has not been analyzed yet. ' +
-  'Real answers and citations will be available after backend integration.'
+const DOCUMENT_POLL_INTERVAL = 2000
 
 type Feedback = {
   type: 'success' | 'error'
@@ -28,12 +29,11 @@ type Feedback = {
 function App() {
   const [initialState] = useState(loadMockState)
 
-  const [documents, setDocuments] = useState<DocumentSummary[]>(
-    initialState.documents
-  )
+  const [documents, setDocuments] = useState<DocumentSummary[]>([])
+  const [isDocumentsLoading, setIsDocumentsLoading] = useState(true)
 
   const [selectedDocumentId, setSelectedDocumentId] =
-    useState<string | null>(initialState.selectedDocumentId)
+    useState<string | null>(null)
 
   const [messagesByDocument, setMessagesByDocument] = useState<
     Record<string, ChatMessage[]>
@@ -42,7 +42,6 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
-  // Yanıt üretilen belgeyi takip ediyoruz.
   const [respondingDocumentId, setRespondingDocumentId] =
     useState<string | null>(null)
 
@@ -50,27 +49,103 @@ function App() {
     'idle' | 'loading' | 'streaming'
   >('idle')
 
-  // Aynı anda ikinci yanıtın başlatılmasını engeller.
+  // Devam eden SSE isteğini iptal etmek için kullanıyoruz.
+  const streamControllerRef = useRef<AbortController | null>(null)
+
+  // Eski isteğin yeni belgeye yanıt yazmasını engeller.
+  const streamRequestIdRef = useRef(0)
+
   const responseInProgressRef = useRef(false)
+  const uploadInProgressRef = useRef(false)
 
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
-  const streamInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Seçili belgeyi güncel olarak takip ediyoruz.
+  const selectedDocumentIdRef = useRef<string | null>(null)
 
+  // Mock mesaj geçmişi, gerçek belge kayıtlarından ayrı tutuluyor.
   useEffect(() => {
     saveMockState({
-      documents,
-      selectedDocumentId,
+      documents: [],
+      selectedDocumentId: null,
       messagesByDocument,
     })
-  }, [documents, selectedDocumentId, messagesByDocument])
+  }, [messagesByDocument])
 
+  // Uygulama açıldığında gerçek belgeleri backend'den getiriyoruz.
+  useEffect(() => {
+    let isActive = true
+
+    const loadDocuments = async () => {
+      try {
+        const backendDocuments = await getDocuments()
+
+        if (!isActive) return
+
+        setDocuments(backendDocuments)
+      } catch (error) {
+        if (!isActive) return
+
+        setFeedback({
+          type: 'error',
+          title: 'Could not load documents',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Please try again later.',
+        })
+      } finally {
+        if (isActive) {
+          setIsDocumentsLoading(false)
+        }
+      }
+    }
+
+    void loadDocuments()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
+
+  // Queued belgelerin durumunu otomatik yeniliyoruz.
+  useEffect(() => {
+    if (!documents.some((document) => document.status === 'queued')) {
+      return
+    }
+
+    let isActive = true
+    let requestInProgress = false
+
+    const refreshDocuments = async () => {
+      if (requestInProgress) return
+      requestInProgress = true
+
+      try {
+        const updatedDocuments = await getDocuments()
+
+        if (isActive) {
+          setDocuments(updatedDocuments)
+        }
+      } catch (error) {
+        console.error('Document status refresh failed:', error)
+      } finally {
+        requestInProgress = false
+      }
+    }
+
+    const interval = setInterval(() => {
+      void refreshDocuments()
+    }, DOCUMENT_POLL_INTERVAL)
+
+    return () => {
+      isActive = false
+      clearInterval(interval)
+    }
+  }, [documents])
+
+  // Uygulama kapatılırken devam eden SSE isteğini iptal ediyoruz.
   useEffect(() => {
     return () => {
-      timers.current.forEach(clearTimeout)
-
-      if (streamInterval.current !== null) {
-        clearInterval(streamInterval.current)
-      }
+      streamControllerRef.current?.abort()
     }
   }, [])
 
@@ -90,13 +165,29 @@ function App() {
     respondingDocumentId === selectedDocumentId &&
     responsePhase === 'streaming'
 
+  // Belge değiştiğinde eski SSE akışını durduruyoruz.
+  const selectDocument = (documentId: string | null) => {
+    if (selectedDocumentIdRef.current !== documentId) {
+      streamRequestIdRef.current += 1
+      streamControllerRef.current?.abort()
+      streamControllerRef.current = null
+      responseInProgressRef.current = false
+
+      setRespondingDocumentId(null)
+      setResponsePhase('idle')
+    }
+
+    selectedDocumentIdRef.current = documentId
+    setSelectedDocumentId(documentId)
+  }
+
   const handleGoHome = () => {
-    setSelectedDocumentId(null)
+    selectDocument(null)
     setFeedback(null)
   }
 
-  const handleFileSelect = (file: File) => {
-    if (isUploading) return
+  const handleFileSelect = async (file: File) => {
+    if (uploadInProgressRef.current) return
 
     if (!/\.(pdf|txt)$/i.test(file.name)) {
       setFeedback({
@@ -125,61 +216,60 @@ function App() {
       return
     }
 
+    uploadInProgressRef.current = true
     setIsUploading(true)
     setFeedback(null)
 
-    const mockDocument: DocumentSummary = {
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: file.size,
-      mime_type: /\.pdf$/i.test(file.name)
-        ? 'application/pdf'
-        : 'text/plain',
-      status: 'queued',
-      created_at: new Date().toISOString(),
-      processed_at: null,
-      error: null,
+    try {
+      const uploadResult = await uploadDocument(file)
+      const backendDocuments = await getDocuments()
+
+      setDocuments(backendDocuments)
+      selectDocument(uploadResult.id)
+
+      setFeedback({
+        type: 'success',
+        title: file.name,
+        message: uploadResult.duplicate
+          ? 'This document already exists.'
+          : 'Document uploaded. Processing will begin shortly.',
+      })
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        title: 'Upload failed',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Could not upload document.',
+      })
+    } finally {
+      uploadInProgressRef.current = false
+      setIsUploading(false)
     }
-
-    setDocuments((previous) => [mockDocument, ...previous])
-    setSelectedDocumentId(mockDocument.id)
-    setIsUploading(false)
-
-    setFeedback({
-      type: 'success',
-      title: file.name,
-      message: 'Mock document added. No file was uploaded.',
-    })
-
-    const timer = setTimeout(() => {
-      setDocuments((previous) =>
-        previous.map((document) =>
-          document.id === mockDocument.id
-            ? {
-                ...document,
-                status: 'ready',
-                processed_at: new Date().toISOString(),
-              }
-            : document
-        )
-      )
-    }, MOCK_PROCESSING_DELAY)
-
-    timers.current.push(timer)
   }
 
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = async (message: string) => {
+    const document = documents.find(
+      (item) => item.id === selectedDocumentIdRef.current
+    )
+
     if (
-      !selectedDocument ||
-      selectedDocument.status !== 'ready' ||
-      responseInProgressRef.current
+      !document ||
+      document.status !== 'ready' ||
+      responseInProgressRef.current ||
+      !message.trim()
     ) {
       return
     }
 
+    const documentId = document.id
+    const requestId = ++streamRequestIdRef.current
+    const controller = new AbortController()
+
+    streamControllerRef.current = controller
     responseInProgressRef.current = true
 
-    const documentId = selectedDocument.id
     const assistantMessageId = crypto.randomUUID()
 
     const userMessage: ChatMessage = {
@@ -189,6 +279,7 @@ function App() {
       createdAt: new Date().toISOString(),
     }
 
+    // Önce kullanıcının mesajını ekliyoruz.
     setMessagesByDocument((previous) => ({
       ...previous,
       [documentId]: [
@@ -199,62 +290,128 @@ function App() {
 
     setRespondingDocumentId(documentId)
     setResponsePhase('loading')
+    setFeedback(null)
 
-    // Kısa bir bekleme sonrasında mock streaming başlar.
-    const thinkingTimer = setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: '',
-        createdAt: new Date().toISOString(),
-      }
+    let receivedSources: Source[] = []
 
+    // Yalnızca hâlâ geçerli olan isteğin UI'ı değiştirmesine izin veriyoruz.
+    const isCurrentRequest = () =>
+      streamRequestIdRef.current === requestId &&
+      !controller.signal.aborted
+
+    const removePartialAnswer = () => {
       setMessagesByDocument((previous) => ({
         ...previous,
-        [documentId]: [
-          ...(previous[documentId] ?? []),
-          assistantMessage,
-        ],
+        [documentId]: (previous[documentId] ?? []).filter(
+          (item) => item.id !== assistantMessageId
+        ),
       }))
+    }
 
-      setResponsePhase('streaming')
+    try {
+      await streamQuestion(
+        message,
+        documentId,
+        {
+          onSources: (sources) => {
+            if (!isCurrentRequest()) return
+            receivedSources = sources
+          },
 
-      // Metni kelimelere ayırarak parça parça ekliyoruz.
-      const chunks = MOCK_ANSWER.match(/\S+\s*/g) ?? []
-      let chunkIndex = 0
+          onDelta: (text) => {
+            if (!isCurrentRequest()) return
 
-      streamInterval.current = setInterval(() => {
-        if (chunkIndex >= chunks.length) {
-          if (streamInterval.current !== null) {
-            clearInterval(streamInterval.current)
-            streamInterval.current = null
-          }
+            setResponsePhase('streaming')
 
-          responseInProgressRef.current = false
-          setResponsePhase('idle')
-          setRespondingDocumentId(null)
-          return
-        }
+            setMessagesByDocument((previous) => {
+              const existingMessages = previous[documentId] ?? []
+              const assistantExists = existingMessages.some(
+                (item) => item.id === assistantMessageId
+              )
 
-        const chunk = chunks[chunkIndex]
-        chunkIndex += 1
+              if (!assistantExists) {
+                const assistantMessage: ChatMessage = {
+                  id: assistantMessageId,
+                  role: 'assistant',
+                  content: text,
+                  createdAt: new Date().toISOString(),
+                }
 
-        setMessagesByDocument((previous) => ({
-          ...previous,
-          [documentId]: (previous[documentId] ?? []).map(
-            (existingMessage) =>
-              existingMessage.id === assistantMessageId
-                ? {
-                    ...existingMessage,
-                    content: existingMessage.content + chunk,
-                  }
-                : existingMessage
-          ),
-        }))
-      }, MOCK_STREAM_INTERVAL)
-    }, MOCK_THINKING_DELAY)
+                return {
+                  ...previous,
+                  [documentId]: [
+                    ...existingMessages,
+                    assistantMessage,
+                  ],
+                }
+              }
 
-    timers.current.push(thinkingTimer)
+              return {
+                ...previous,
+                [documentId]: existingMessages.map((item) =>
+                  item.id === assistantMessageId
+                    ? { ...item, content: item.content + text }
+                    : item
+                ),
+              }
+            })
+          },
+
+          onDone: (result) => {
+            if (!isCurrentRequest()) return
+
+            // Yalnızca yanıtın gerçekten kullandığı kaynakları saklıyoruz.
+            const citedSources = receivedSources.filter((source) =>
+              result.cited_labels.includes(source.label)
+            )
+
+            const completedMessage: ChatMessage = {
+              id: assistantMessageId,
+              role: 'assistant',
+              content: result.answer,
+              sources: citedSources,
+              createdAt: new Date().toISOString(),
+            }
+
+            setMessagesByDocument((previous) => {
+              const existingMessages = previous[documentId] ?? []
+
+              return {
+                ...previous,
+                [documentId]: [
+                  ...existingMessages.filter(
+                    (item) => item.id !== assistantMessageId
+                  ),
+                  completedMessage,
+                ],
+              }
+            })
+          },
+        },
+        controller.signal
+      )
+    } catch (error) {
+      if (!isCurrentRequest()) return
+
+      // Hata olduğunda tamamlanmamış assistant yanıtını siliyoruz.
+      removePartialAnswer()
+
+      setFeedback({
+        type: 'error',
+        title: 'Could not generate answer',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Please try again.',
+      })
+    } finally {
+      if (streamRequestIdRef.current === requestId) {
+        streamControllerRef.current = null
+        responseInProgressRef.current = false
+        setRespondingDocumentId(null)
+        setResponsePhase('idle')
+      }
+    }
   }
 
   return (
@@ -262,10 +419,10 @@ function App() {
       <Sidebar
         documents={documents}
         selectedDocumentId={selectedDocumentId}
-        onSelectDocument={setSelectedDocumentId}
+        onSelectDocument={selectDocument}
         onGoHome={handleGoHome}
         onFileSelect={handleFileSelect}
-        isLoading={false}
+        isLoading={isDocumentsLoading}
         isUploading={isUploading}
       />
 
@@ -299,7 +456,6 @@ function App() {
           </div>
         )}
 
-
         {selectedDocumentId === null ? (
           <HomeWorkspace
             onFileSelect={handleFileSelect}
@@ -325,7 +481,6 @@ function App() {
             />
           </>
         )}
-
       </main>
     </div>
   )
