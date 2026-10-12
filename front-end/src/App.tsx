@@ -55,6 +55,12 @@ function App() {
   // Eski isteğin yeni belgeye yanıt yazmasını engeller.
   const streamRequestIdRef = useRef(0)
 
+  // Henüz tamamlanmamış assistant mesajını takip ediyoruz.
+  const pendingAssistantRef = useRef<{
+    documentId: string
+    messageId: string
+  } | null>(null)
+
   const responseInProgressRef = useRef(false)
   const uploadInProgressRef = useRef(false)
 
@@ -168,11 +174,28 @@ function App() {
   // Belge değiştiğinde eski SSE akışını durduruyoruz.
   const selectDocument = (documentId: string | null) => {
     if (selectedDocumentIdRef.current !== documentId) {
+      // Eski SSE isteğini geçersiz kılıyoruz.
       streamRequestIdRef.current += 1
+
+      // Devam eden ağ isteğini iptal ediyoruz.
       streamControllerRef.current?.abort()
       streamControllerRef.current = null
-      responseInProgressRef.current = false
 
+      // İptal edilen isteğin yarım assistant yanıtını siliyoruz.
+      const pending = pendingAssistantRef.current
+
+      if (pending) {
+        setMessagesByDocument((previous) => ({
+          ...previous,
+          [pending.documentId]: (
+            previous[pending.documentId] ?? []
+          ).filter((item) => item.id !== pending.messageId),
+        }))
+
+        pendingAssistantRef.current = null
+      }
+
+      responseInProgressRef.current = false
       setRespondingDocumentId(null)
       setResponsePhase('idle')
     }
@@ -180,6 +203,7 @@ function App() {
     selectedDocumentIdRef.current = documentId
     setSelectedDocumentId(documentId)
   }
+
 
   const handleGoHome = () => {
     selectDocument(null)
@@ -272,6 +296,11 @@ function App() {
 
     const assistantMessageId = crypto.randomUUID()
 
+    pendingAssistantRef.current = {
+      documentId,
+      messageId: assistantMessageId,
+    }
+
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -359,6 +388,9 @@ function App() {
 
           onDone: (result) => {
             if (!isCurrentRequest()) return
+
+          // Yanıt başarıyla tamamlandı; artık silinmemeli.
+          pendingAssistantRef.current = null
 
             // Yalnızca yanıtın gerçekten kullandığı kaynakları saklıyoruz.
             const citedSources = receivedSources.filter((source) =>
