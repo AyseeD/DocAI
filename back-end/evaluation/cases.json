@@ -1,0 +1,98 @@
+[
+  {
+    "question": "What is the project name?",
+    "expected_keyword": "cedar",
+    "refusal": false
+  },
+  {
+    "question": "Who coordinates the project?",
+    "expected_keyword": "mira",
+    "refusal": false
+  },
+  {
+    "question": "Which city hosts the office?",
+    "expected_keyword": "izmir",
+    "refusal": false
+  },
+  {
+    "question": "Which room hosts training?",
+    "expected_keyword": "204",
+    "refusal": false
+  },
+  {
+    "question": "When does training start?",
+    "expected_keyword": "09:30",
+    "refusal": false
+  },
+  {
+    "question": "How many people can attend?",
+    "expected_keyword": "24",
+    "refusal": false
+  },
+  {
+    "question": "What is the registration deadline?",
+    "expected_keyword": "15",
+    "refusal": false
+  },
+  {
+    "question": "What is the support address?",
+    "expected_keyword": "help@example.org",
+    "refusal": false
+  },
+  {
+    "question": "How long is the trial?",
+    "expected_keyword": "14",
+    "refusal": false
+  },
+  {
+    "question": "How often are backups made?",
+    "expected_keyword": "daily",
+    "refusal": false
+  },
+  {
+    "question": "How long are backups retained?",
+    "expected_keyword": "30",
+    "refusal": false
+  },
+  {
+    "question": "What file types can be uploaded?",
+    "expected_keyword": "pdf",
+    "refusal": false
+  },
+  {
+    "question": "What is the maximum upload size?",
+    "expected_keyword": "20",
+    "refusal": false
+  },
+  {
+    "question": "What is the document page limit?",
+    "expected_keyword": "200",
+    "refusal": false
+  },
+  {
+    "question": "What is the default interface language?",
+    "expected_keyword": "english",
+    "refusal": false
+  },
+  {
+    "question": "Which day is maintenance scheduled?",
+    "expected_keyword": "sunday",
+    "refusal": false
+  },
+  {
+    "question": "What is the coordinator\u2019s salary?",
+    "refusal": true
+  },
+  {
+    "question": "What is the database password?",
+    "refusal": true
+  },
+  {
+    "question": "Who founded the organization?",
+    "refusal": true
+  },
+  {
+    "question": "What are the annual revenue figures?",
+    "refusal": true
+  }
+]
