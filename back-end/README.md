@@ -49,9 +49,39 @@ Content-Type: application/json
 
 `AI_MODE=mock` is the default. It uses deterministic artificial vectors and a labeled mock answer emitted in several deltas. This is for UI/protocol testing, not semantic retrieval or answer-quality evaluation. It makes no external model calls.
 
-The real provider adapter in `app/api/ai.py` is currently a placeholder. `AI_MODE=model` requires `AI_API_KEY`, but embedding and generation still need implementation. Do not treat mock output as evidence of answer quality, grounding, prompt-injection resistance, or cost.
+Real mode now uses OpenRouter for both embeddings and streamed chat completion. The same OpenRouter API key is used for both. Configure `back-end/.env`:
 
-Real-mode retrieval filters the top five candidates by cosine distance using `RETRIEVAL_MAX_DISTANCE` (default `0.5`, valid range `0–2`). Smaller values are stricter. Calibrate this starting value against the real embedding model and evaluation cases. Mock mode bypasses this filter because its hash vectors have no semantic meaning. If no candidates remain, the backend returns the existing refusal with no citations and zero generation tokens, without calling generation. The cutoff is included in cache identity, so changing it invalidates prior answers.
+```dotenv
+AI_MODE=model
+AI_API_KEY=your-openrouter-key
+GENERATION_MODEL=nvidia/nemotron-3.5-lightning:free
+EMBEDDING_MODEL=nvidia/llama-nemotron-embed-vl-1b-v2:free
+RETRIEVAL_MAX_DISTANCE=0.85
+```
+
+No separate embedding key or model download is required. These two endpoints were verified as free in OpenRouter's catalog on 2026-10-13; availability and rate limits are provider-controlled. Embedding calls request 768 dimensions to match PostgreSQL, with `query`/`passage` input types. Other embedding models must support those parameters and dimensions; mismatches fail rather than corrupting the index. Never put the key in the frontend.
+
+Direct Python/uvicorn execution loads this .env automatically without overriding existing process environment variables. Docker injects it through `env_file`. After changing settings, rebuild/recreate API and worker:
+
+```bash
+docker compose up --build -d
+```
+
+Re-upload documents indexed in mock mode or with a different embedding pipeline. Existing records are retained but excluded from the new pipeline. Retry is for failures in the current pipeline, not migration of old vectors.
+
+The adapter requests SSE, ignores provider keepalive and reasoning fields, maps usage into the existing frontend token fields, and closes the HTTP stream on cancellation. A missing completion marker, provider error or output-token limit produces an error rather than caching a partial answer. HTTP calls use 10-second connect and 60-second inactivity timeouts; embeddings retry transient failures up to four attempts, while generation is never replayed automatically. Errors exclude raw provider response bodies.
+
+Real-mode retrieval filters the top five candidates by `RETRIEVAL_MAX_DISTANCE` (default `0.85`, valid range `0–2`). Smaller values are stricter. A small synthetic check with this embedding model separated four supported queries (distance 0.54–0.79) from two unrelated queries (0.93–0.99); this is an initial setting, not a full quality evaluation. Mock mode bypasses this filter. Empty retrieval returns the existing refusal without generation. Model, prompt, embedding pipeline and cutoff changes invalidate the relevant cache identity.
+
+Document passages and questions are sent to OpenRouter and its model providers. The selected NVIDIA free endpoint carries its own data-use terms: [embedding model page](https://openrouter.ai/nvidia/llama-nemotron-embed-vl-1b-v2:free). Use synthetic/non-sensitive data for testing.
+
+For a live check without Docker/database:
+
+```bash
+.venv/bin/python scripts/check_openrouter.py
+```
+
+This sends only a synthetic Cedar project passage and question. Integration verification on 2026-10-13 returned `Cedar [1]`, six text deltas and 148 generation tokens (141 prompt + 7 completion). Counts can vary. Full database/worker/browser verification still requires running Docker.
 
 ## Code layout
 
@@ -63,7 +93,7 @@ app/schemas/questions.py    Required question/document request model
 app/services/documents.py   Shared document readiness check
 app/services/questions.py   Scoped retrieval, caching, citations and logging
 app/services/worker.py      PDF/TXT extraction, chunking and embedding
-app/api/ai.py               Mock/unfinished real-provider boundary
+app/api/ai.py               OpenRouter/mock provider boundary
 app/db/db.py                Connections and vector formatting
 app/db/migrate.py           Non-destructive schema upgrade
 app/schemas/db.sql          Fresh database schema

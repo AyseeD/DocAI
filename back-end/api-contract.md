@@ -28,8 +28,8 @@ Questions require a nonblank string of at most 2000 characters before whitespace
 
 Use POST fetch with a stream reader. Parse frames across network chunk boundaries. On error or EOF before done, discard partial text. Source text is untrusted and should be rendered as text. Abort on navigation remains compatible. The backend closes the generation iterator and logs cancellation when its response iterator is closed. A blocking provider/database call cannot be forcibly interrupted; the provider adapter must implement bounded timeouts and close its own network stream in a finally block.
 
-Real-model retrieval applies `RETRIEVAL_MAX_DISTANCE` (default 0.5) to the top five candidates. This needs calibration; it is not proof of grounding. Empty retrieval returns the refusal with no citations or generation call. Mock retrieval bypasses the filter.
+Real-model retrieval applies `RETRIEVAL_MAX_DISTANCE` (default to 0.85) to the top five candidates. This needs calibration; it is not proof of grounding. Empty retrieval returns the refusal with no citations or generation call. Mock retrieval bypasses the filter.
 
 ## Pending integration
 
-Real AI is not implemented yet. Verify live PDF source pages, failed/retry transitions, network disconnects, token usage, cache miss/hit and 20+ quality cases after integration. Authentication/ownership, rate limits and prompt-injection evaluation remain shared design work. Server-side chat history and durable generation across document switches are outside the present API.
+OpenRouter embeddings and streamed generation are implemented. Verify live PDF source pages, failed/retry transitions, network disconnects, token usage, cache miss/hit and 20+ quality cases after integration. Authentication/ownership, rate limits and prompt-injection evaluation remain shared design work. Server-side chat history and durable generation across document switches are outside the present API.

@@ -13,7 +13,7 @@ from app.db.db import connect, vector_literal
 from app.services.documents import require_ready_document
 
 # Calibrate against real-model evaluation; mock hash vectors have no relevance meaning.
-MAX_DISTANCE = float(os.getenv("RETRIEVAL_MAX_DISTANCE", "0.5"))
+MAX_DISTANCE = float(os.getenv("RETRIEVAL_MAX_DISTANCE", "0.85"))
 if not math.isfinite(MAX_DISTANCE) or not 0 <= MAX_DISTANCE <= 2:
     raise ValueError("RETRIEVAL_MAX_DISTANCE must be between 0 and 2")
 
