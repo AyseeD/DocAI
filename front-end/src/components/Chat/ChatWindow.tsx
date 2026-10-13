@@ -11,6 +11,8 @@ type ChatWindowProps = {
   document: DocumentSummary | null
   isLoading: boolean
   isStreaming: boolean
+  isRetrying: boolean
+  onRetryDocument: (documentId: string) => void
 }
 
 function ChatWindow({
@@ -18,6 +20,8 @@ function ChatWindow({
   document,
   isLoading,
   isStreaming,
+  isRetrying,
+  onRetryDocument,
 }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -68,6 +72,16 @@ function ChatWindow({
         <div className="chat-window-empty">
           <h2>{emptyState.title}</h2>
           <p>{emptyState.description}</p>
+
+          {document?.status === 'failed' && (
+            <button
+              type="button"
+              onClick={() => onRetryDocument(document.id)}
+              disabled={isRetrying}
+            >
+              {isRetrying ? 'Retrying...' : 'Retry processing'}
+            </button>
+          )}
         </div>
       ) : (
         <div className="chat-messages">

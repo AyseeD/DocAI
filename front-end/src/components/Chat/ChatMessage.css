@@ -14,6 +14,7 @@
 
 .chat-message.assistant {
   align-self: flex-start;
+  width: 100%;
 }
 
 .chat-message-author {
@@ -34,16 +35,15 @@
   background: #f3f4f6;
 }
 
-.chat-message-sources {
+
+.chat-message-metrics {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #9ca3af;
 }
 
-.chat-source {
-  padding: 6px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 11px;
-  color: #6b7280;
-}

@@ -71,7 +71,7 @@ def list_docs():
 def document(doc_id: UUID):
     with connect() as db:
         row = db.execute(
-            """SELECT id,name,size,status,error,created_at,processed_at FROM documents
+            """SELECT id,name,size,mime_type,status,error,created_at,processed_at FROM documents
                WHERE id=%s AND pipeline_version=%s""", (doc_id, PIPELINE,)
         ).fetchone()
     if row is None:
@@ -83,7 +83,7 @@ def document(doc_id: UUID):
 def retry_document(doc_id: UUID):
     with connect() as db:
         row = db.execute(
-            """UPDATE documents SET status='queued',error=NULL
+            """UPDATE documents SET status='queued',error=NULL,processed_at=NULL
                WHERE id=%s AND pipeline_version=%s AND status='failed' RETURNING id,status""",
             (doc_id, PIPELINE,),
         ).fetchone()

@@ -11,10 +11,18 @@ export type ChatSource = {
   content: string
 }
 
+export type AnswerMetrics = {
+  cacheHit: boolean
+  tokenCount: number | null
+  latencyMs: number
+  aiMode: string
+}
+
 export type ChatMessage = {
   id: string
   role: ChatRole
   content: string
   sources?: ChatSource[]
+  metrics?: AnswerMetrics
   createdAt: string
 }
