@@ -3,21 +3,32 @@ import logging
 import time
 from uuid import uuid4
 from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from app.api.ai import PIPELINE, embed
 from app.db.db import UPLOADS, connect, vector_literal
 
 logging.basicConfig(level=logging.INFO)
 
+class DocumentProcessingError(ValueError):
+    """A validation failure safe to display to the document owner."""
+
+
 #extract the pdf file pages' texts
 def extract(path, mime_type):
     if mime_type == "application/pdf":
-        reader = PdfReader(path)
+        try:
+            reader = PdfReader(path)
+        except PdfReadError as exc:
+            raise DocumentProcessingError("Invalid PDF. Upload a valid PDF file.") from exc
         if reader.is_encrypted:
-            raise ValueError("Encrypted pdf is unsupported")
+            raise DocumentProcessingError("Encrypted PDF is unsupported. Upload an unencrypted copy.")
         if len(reader.pages) > 200:
-            raise ValueError("PDF exceeds 200 pages")
+            raise DocumentProcessingError("PDF exceeds 200 pages")
         return [(i, page.extract_text() or "") for i, page in enumerate(reader.pages, 1)]
-    return [(None, path.read_text(encoding="utf-8"))]
+    try:
+        return [(None, path.read_text(encoding="utf-8-sig"))]
+    except UnicodeDecodeError as exc:
+        raise DocumentProcessingError("TXT files must use UTF-8 encoding.") from exc
 
 #split the texts inside the pages into 150-180 word chunks with the page numbers as well
 def split_pages(pages):
@@ -46,9 +57,9 @@ def process_one():
                 pages = extract(UPLOADS / doc["storage_key"], doc["mime_type"])
                 pieces = list(split_pages(pages))
                 if not pieces:
-                    raise ValueError("No text found; scanned PDFs need OCR")
+                    raise DocumentProcessingError("No text found; scanned PDFs need OCR")
                 if len(pieces) > 2000:
-                    raise ValueError("Document exceeds 2000 chunks")
+                    raise DocumentProcessingError("Document exceeds 2000 chunks")
                 for order, (page, content) in enumerate(pieces):
                     db.execute(
                         """INSERT INTO chunks
@@ -62,11 +73,12 @@ def process_one():
                     (doc["id"],),
                 )
                 
-        except Exception:
+        except Exception as exc:
             logging.exception("Document processing failed: %s", doc["id"])
             db.execute(
                 "UPDATE documents SET status='failed', error=%s WHERE id=%s",
-                ("Processing failed. Inspect worker logs, then retry.", doc["id"]),
+                (str(exc) if isinstance(exc, DocumentProcessingError) else
+                 "Processing failed. Inspect worker logs, then retry.", doc["id"]),
             )
     return True
 

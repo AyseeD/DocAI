@@ -15,8 +15,8 @@ ANSWER_VERSION = f"{MODEL}:prompt-v1:top5"
 REFUSAL = "I couldn't find the answer in the uploaded documents."
 client = None
 if MODE == "model":
-    if not os.getenv("GEMINI_API_KEY"):
-        raise ValueError("GEMINI_API_KEY is required for AI_MODE=gemini")
+    if not os.getenv("AI_API_KEY"):
+        raise ValueError("AI_API_KEY is required for AI_MODE=model")
     client = []
 
 

@@ -2,6 +2,8 @@
 import hashlib
 import json
 import logging
+import os
+import math
 import re
 import time
 from uuid import uuid4
@@ -9,6 +11,11 @@ from psycopg.types.json import Jsonb
 from app.api.ai import PIPELINE, MODE, MODEL, ANSWER_VERSION, REFUSAL, embed, generate
 from app.db.db import connect, vector_literal
 from app.services.documents import require_ready_document
+
+# Calibrate against real-model evaluation; mock hash vectors have no relevance meaning.
+MAX_DISTANCE = float(os.getenv("RETRIEVAL_MAX_DISTANCE", "0.5"))
+if not math.isfinite(MAX_DISTANCE) or not 0 <= MAX_DISTANCE <= 2:
+    raise ValueError("RETRIEVAL_MAX_DISTANCE must be between 0 and 2")
 
 #return the value as a string (hexadecimal digested digits)
 def digest(value):
@@ -28,7 +35,7 @@ def public_source(row, label):
 #performs a vector similarity search to fetch the top 5 relevant chunks and returns them for downstream answer generation
 def prepare(question, document_id):
     # Exact-question cache (whitespace normalized, case preserved).
-    key = digest(json.dumps([str(document_id), question, ANSWER_VERSION, PIPELINE]))
+    key = digest(json.dumps([str(document_id), question, ANSWER_VERSION, PIPELINE, MAX_DISTANCE]))
     with connect() as db:
         db.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         doc = require_ready_document(document_id, db=db)
@@ -48,10 +55,12 @@ def prepare(question, document_id):
             return key, version, cached["answer"], rows 
         vector = vector_literal(embed(question, query=True))
         rows = db.execute(
-            """SELECT c.*,d.name FROM chunks c JOIN documents d ON d.id=c.doc_id
+            """SELECT c.*,d.name,c.embedding <=> %s::vector AS distance FROM chunks c JOIN documents d ON d.id=c.doc_id
                 WHERE d.id=%s AND d.status='ready' AND d.pipeline_version=%s
-                ORDER BY c.embedding <=> %s::vector, c.id LIMIT 5""", (document_id, PIPELINE, vector)
+                ORDER BY c.embedding <=> %s::vector, c.id LIMIT 5""", (vector, document_id, PIPELINE, vector)
         ).fetchall()
+    if MODE != "mock":
+        rows = [row for row in rows if row["distance"] <= MAX_DISTANCE]
     return key, version, None, rows 
 
 #save an answer as cached for the faster answering
@@ -91,9 +100,15 @@ def stream_answer(question, document_id):
         else:
             generation_called = MODE != "mock"
             parts = []
-            for text in generate(question, rows, usage):
-                parts.append(text)
-                yield event("delta", {"text": text})
+            generation = generate(question, rows, usage)
+            try:
+                for text in generation:
+                    parts.append(text)
+                    yield event("delta", {"text": text})
+            finally:
+                close = getattr(generation, "close", None)
+                if close is not None:
+                    close()
             answer= "".join(parts).strip()
 
         labels = sorted(set(int(n) for n in re.findall(r"\[(\d+)\]", answer)))

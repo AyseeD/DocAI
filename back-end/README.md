@@ -49,18 +49,9 @@ Content-Type: application/json
 
 `AI_MODE=mock` is the default. It uses deterministic artificial vectors and a labeled mock answer emitted in several deltas. This is for UI/protocol testing, not semantic retrieval or answer-quality evaluation. It makes no external model calls.
 
-To use the implemented provider adapter:
+The real provider adapter in `app/api/ai.py` is currently a placeholder. `AI_MODE=model` requires `AI_API_KEY`, but embedding and generation still need implementation. Do not treat mock output as evidence of answer quality, grounding, prompt-injection resistance, or cost.
 
-```dotenv
-AI_MODE=gemini
-GEMINI_API_KEY=your-private-key
-GENERATION_MODEL=gemini-2.5-flash
-EMBEDDING_MODEL=gemini-embedding-001
-```
-
-Check model access and quota in your provider account; no free quota is assumed. Both the document text and question are sent to that provider. Recreate API and worker after editing `.env`. Re-upload documents after changing the embedding model or switching from mock: the pipeline version intentionally separates incompatible vectors. Provider calls live in `app/api/ai.py`, with bounded exponential-backoff retries for transient embedding errors. Generation failures produce an error event; streams are not automatically restarted after partial output.
-
-The generation prompt treats source passages as untrusted data, supplies no tools or secrets, and requests citations or an explicit refusal. Code validates citation label ranges before caching. This does not prove factual grounding or guarantee immunity to prompt injection; run the evaluation fixture and manually inspect supporting passages.
+Real-mode retrieval filters the top five candidates by cosine distance using `RETRIEVAL_MAX_DISTANCE` (default `0.5`, valid range `0–2`). Smaller values are stricter. Calibrate this starting value against the real embedding model and evaluation cases. Mock mode bypasses this filter because its hash vectors have no semantic meaning. If no candidates remain, the backend returns the existing refusal with no citations and zero generation tokens, without calling generation. The cutoff is included in cache identity, so changing it invalidates prior answers.
 
 ## Code layout
 
@@ -72,7 +63,7 @@ app/schemas/questions.py    Required question/document request model
 app/services/documents.py   Shared document readiness check
 app/services/questions.py   Scoped retrieval, caching, citations and logging
 app/services/worker.py      PDF/TXT extraction, chunking and embedding
-app/api/ai.py               Mock/Gemini provider boundary
+app/api/ai.py               Mock/unfinished real-provider boundary
 app/db/db.py                Connections and vector formatting
 app/db/migrate.py           Non-destructive schema upgrade
 app/schemas/db.sql          Fresh database schema
@@ -108,3 +99,7 @@ Without `--smoke`, mock mode is rejected. This runner measures expected-keyword 
 - Splitting is page-aware, 180 words with 30-word overlap; it is not token-aware. Scanned PDFs need OCR; heading extraction (`section`) is not implemented.
 - This is a local, single-user backend with no authentication or document ownership. Do not expose it as a multi-user service without ownership checks, request limits before multipart parsing and parser resource limits.
 - Filesystem writes and database commits are not atomic; a process crash can leave orphan files. Cache cleanup, connection pooling and operational limits remain future work.
+
+## Backend acceptance handoff (2026-10-13)
+
+See `api-contract.md` for the current API and `backend-handoff.md` for the changes, frontend follow-ups, and remaining live tests. No schema migration or frontend changes are required for this update.

@@ -123,7 +123,7 @@ class IsolationTests(unittest.TestCase):
         for doc_id, db in [(DOC_A, db_a), (DOC_B, db_b)]:
             sql, params = db.calls[-1]
             self.assertIn("WHERE d.id=%s", sql)
-            self.assertEqual(params[0], doc_id)
+            self.assertEqual(params[1], doc_id)
             cache_sql, cache_params = db.calls[-2]
             self.assertIn("document_id=%s", cache_sql)
             self.assertEqual(cache_params[-1], doc_id)
