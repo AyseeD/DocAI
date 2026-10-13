@@ -34,3 +34,16 @@
   border-radius: 18px;
   background: #f3f4f6;
 }
+
+
+.chat-message-metrics {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #9ca3af;
+}
+

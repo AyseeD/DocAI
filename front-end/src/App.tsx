@@ -8,6 +8,7 @@ import { loadMockState, saveMockState } from './data/mockStorage'
 import {
   getDocuments,
   uploadDocument,
+  retryDocument,
 } from './services/documentService'
 import {
   streamQuestion,
@@ -40,6 +41,12 @@ function App() {
   >(initialState.messagesByDocument)
 
   const [isUploading, setIsUploading] = useState(false)
+
+  const [retryingDocumentId, setRetryingDocumentId] =
+    useState<string | null>(null)
+
+  const retryInProgressRef = useRef(false)
+
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
   const [respondingDocumentId, setRespondingDocumentId] =
@@ -204,7 +211,6 @@ function App() {
     setSelectedDocumentId(documentId)
   }
 
-
   const handleGoHome = () => {
     selectDocument(null)
     setFeedback(null)
@@ -270,6 +276,49 @@ function App() {
     } finally {
       uploadInProgressRef.current = false
       setIsUploading(false)
+    }
+  }
+
+  // Failed durumundaki belgeyi yeniden işlemeye gönderiyoruz.
+  const handleRetryDocument = async (documentId: string) => {
+    if (retryInProgressRef.current) return
+
+    retryInProgressRef.current = true
+    setRetryingDocumentId(documentId)
+    setFeedback(null)
+
+    try {
+      await retryDocument(documentId)
+
+      setDocuments((previous) =>
+        previous.map((document) =>
+          document.id === documentId
+            ? {
+                ...document,
+                status: 'queued',
+                error: null,
+              }
+            : document
+        )
+      )
+
+      setFeedback({
+        type: 'success',
+        title: 'Processing restarted',
+        message: 'Your document is being processed again.',
+      })
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        title: 'Retry failed',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Could not retry document processing.',
+      })
+    } finally {
+      retryInProgressRef.current = false
+      setRetryingDocumentId(null)
     }
   }
 
@@ -389,19 +438,27 @@ function App() {
           onDone: (result) => {
             if (!isCurrentRequest()) return
 
-          // Yanıt başarıyla tamamlandı; artık silinmemeli.
-          pendingAssistantRef.current = null
+            // Yanıt başarıyla tamamlandı; artık silinmemeli.
+            pendingAssistantRef.current = null
 
             // Yalnızca yanıtın gerçekten kullandığı kaynakları saklıyoruz.
             const citedSources = receivedSources.filter((source) =>
               result.cited_labels.includes(source.label)
             )
 
+            // Tamamlanan yanıtı kaynak ve performans bilgileriyle saklıyoruz.
             const completedMessage: ChatMessage = {
               id: assistantMessageId,
               role: 'assistant',
               content: result.answer,
               sources: citedSources,
+              metrics: {
+                cacheHit: result.cache_hit,
+                tokenCount:
+                  result.generation_token_usage?.total_token_count ?? null,
+                latencyMs: result.latency_ms,
+                aiMode: result.ai_mode,
+              },
               createdAt: new Date().toISOString(),
             }
 
@@ -500,6 +557,8 @@ function App() {
               document={selectedDocument ?? null}
               isLoading={isCurrentDocumentLoading}
               isStreaming={isCurrentDocumentStreaming}
+              isRetrying={retryingDocumentId === selectedDocumentId}
+              onRetryDocument={handleRetryDocument}
             />
 
             <ChatInput
