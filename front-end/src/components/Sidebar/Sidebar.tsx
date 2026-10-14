@@ -3,6 +3,8 @@ import { useRef } from 'react'
 import type { DocumentSummary } from '../../types/document'
 import './Sidebar.css'
 
+type ResponsePhase = 'loading' | 'streaming'
+
 type SidebarProps = {
   documents: DocumentSummary[]
   selectedDocumentId: string | null
@@ -11,6 +13,8 @@ type SidebarProps = {
   onFileSelect: (file: File) => void
   isLoading: boolean
   isUploading: boolean
+  responsePhases: Record<string, ResponsePhase>
+  unreadAnswers: Record<string, boolean>
 }
 
 function Sidebar({
@@ -21,6 +25,8 @@ function Sidebar({
   onFileSelect,
   isLoading,
   isUploading,
+  responsePhases,
+  unreadAnswers,
 }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -28,7 +34,6 @@ function Sidebar({
     <aside className="sidebar">
       <div className="sidebar-logo">DocAI</div>
 
-      {/* Home: Belge seçimini kaldırır, verileri silmez. */}
       <button
         type="button"
         className={`sidebar-home-button ${
@@ -86,7 +91,22 @@ function Sidebar({
           )}
 
           {documents.map((document) => {
-            const isSelected = selectedDocumentId === document.id
+            const isSelected =
+              selectedDocumentId === document.id
+
+            const isGenerating =
+              Boolean(responsePhases[document.id])
+
+            const hasUnreadAnswer =
+              !isGenerating &&
+              document.status === 'ready' &&
+              Boolean(unreadAnswers[document.id])
+
+            const statusClass = isGenerating
+              ? 'generating'
+              : hasUnreadAnswer
+                ? 'answer-ready'
+                : document.status
 
             return (
               <button
@@ -103,11 +123,35 @@ function Sidebar({
                 </div>
 
                 <div
-                  className={`document-status ${document.status}`}
+                  className={`document-status ${statusClass}`}
                 >
-                  {document.status === 'queued'
-                    ? 'processing'
-                    : document.status}
+                  {isGenerating ? (
+                    <>
+                      <span
+                        className="status-spinner"
+                        aria-hidden="true"
+                      />
+                      <span>Generating</span>
+                    </>
+                  ) : hasUnreadAnswer ? (
+                    <>
+                      <span
+                        className="status-check"
+                        aria-hidden="true"
+                      >
+                        ✓
+                      </span>
+                      <span>Answer ready</span>
+                    </>
+                  ) : document.status === 'queued' ? (
+                    <span>Processing</span>
+                  ) : document.status === 'ready' ? (
+                    <span>Ready</span>
+                  ) : document.status === 'failed' ? (
+                    <span>Failed</span>
+                  ) : (
+                    <span>{document.status}</span>
+                  )}
                 </div>
               </button>
             )
