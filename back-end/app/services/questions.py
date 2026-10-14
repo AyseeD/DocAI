@@ -80,8 +80,19 @@ def save_answer(key, version, answer, sources, document_id):
                     (inserted["id"], source["id"], order,)
                 )
 
-#A generator for streaming Rag endpoint. (chain of events)
-# Retrieves needed chunks via prepare, emit them as sources, stream them token by token, validate citations, cache new answers, log the whole query
+class CitationError(ValueError):
+    pass
+
+
+def cited_labels(answer, source_count):
+    labels = sorted(set(int(number) for number in re.findall(r"\[(\d+)\]", answer)))
+    if answer != REFUSAL and (
+        not answer or not labels or any(label < 1 or label > source_count for label in labels)
+    ):
+        raise CitationError("Answer missing valid citations")
+    return labels
+
+
 def stream_answer(question, document_id):
     start = time.monotonic()
     usage, cached, outcome = {}, None, "cancelled"
@@ -93,32 +104,41 @@ def stream_answer(question, document_id):
         
         if cached is not None:
             answer = cached
-            yield event("delta", {"text": answer})
         elif not rows:
             answer = REFUSAL
-            yield event("delta", {"text": answer})
         else:
             generation_called = MODE != "mock"
-            parts = []
-            generation = generate(question, rows, usage)
-            try:
-                for text in generation:
-                    parts.append(text)
-                    yield event("delta", {"text": text})
-            finally:
-                close = getattr(generation, "close", None)
-                if close is not None:
-                    close()
-            answer= "".join(parts).strip()
+            for attempt in range(2):
+                attempt_usage = {}
+                options = {"citation_retry": True} if attempt else {}
+                generation = generate(question, rows, attempt_usage, **options)
+                parts = []
+                try:
+                    for text in generation:
+                        parts.append(text)
+                        yield event("status", {"phase": "checking_references"})
+                    answer = "".join(parts).strip()
+                finally:
+                    for name, count in attempt_usage.items():
+                        usage[name] = usage.get(name, 0) + count
+                    close = getattr(generation, "close", None)
+                    if close is not None:
+                        close()
+                try:
+                    cited_labels(answer, len(rows))
+                    break
+                except CitationError:
+                    if attempt:
+                        raise
+                    logging.warning("Citation validation failed; regenerating once")
 
-        labels = sorted(set(int(n) for n in re.findall(r"\[(\d+)\]", answer)))
-
-        if answer != REFUSAL and (
-            not answer or not labels or any(n < 1 or n > len(rows) for n in labels)):
-            raise ValueError("Answer missing valid citations")
+        labels = cited_labels(answer, len(rows))
         
         if cached is None and rows:
-            save_answer(key, version, answer, rows, document_id)
+            try:
+                save_answer(key, version, answer, rows, document_id)
+            except Exception:
+                logging.exception("Could not cache validated answer")
         
         outcome= "ok"
 
@@ -127,10 +147,16 @@ def stream_answer(question, document_id):
             "generation_token_usage": usage or (None if generation_called else {"total_token_count": 0}),
             "latency_ms": round((time.monotonic() - start) * 1000), "ai_mode": MODE, "document_id": str(document_id),
         })
+    except CitationError:
+        outcome = "error"
+        logging.exception("Question citation validation failed")
+        yield event("error", {
+            "message": "I couldn't verify the answer's source references. Please try again or rephrase your question.",
+        })
     except Exception:
         outcome = "error"
         logging.exception("Question failed")
-        yield event("error", {"message": "Answer failed. Discard partial text and retry."})
+        yield event("error", {"message": "I couldn't complete the answer. Please try again."})
     finally:
         try:
             with connect() as db:

@@ -174,7 +174,7 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(events[-1][1]["cited_labels"], [1])
         self.assertEqual(events[-1][1]["generation_token_usage"]["total_token_count"], 0)
         self.assertEqual(events[-1][1]["document_id"], str(DOC_A))
-        self.assertGreater(sum(name == "delta" for name, _ in events), 1)
+        self.assertFalse(any(name == "delta" for name, _ in events))
         save.assert_called_once()
         self.assertEqual(db.calls[-1][1][-1], DOC_A)
 
@@ -191,9 +191,65 @@ class StreamingTests(unittest.TestCase):
         self.assertTrue(events[-1][1]["cache_hit"])
 
     def test_invalid_citation_emits_error_and_is_not_cached(self):
-        events, save, _ = self.run_stream([chunk()], generator=lambda *args: iter(["Wrong [9]"]))
+        events, save, _ = self.run_stream([chunk()], generator=lambda *args, **kwargs: iter(["Wrong [9]"]))
         self.assertEqual(events[-1][0], "error")
+        self.assertIn("source references", events[-1][1]["message"])
+        self.assertFalse(any(name == "delta" for name, _ in events))
         save.assert_not_called()
+
+    def test_citation_retry_publishes_only_validated_answer_and_sums_usage(self):
+        attempts = []
+
+        def generate(question, rows, usage, citation_retry=False):
+            attempts.append(citation_retry)
+            usage["total_token_count"] = 10
+            yield "Cedar [1]" if citation_retry else "Cedar"
+
+        events, save, _ = self.run_stream([chunk()], generator=generate)
+        self.assertEqual(attempts, [False, True])
+        self.assertEqual([name for name, _ in events if name != "status"], ["sources", "done"])
+        self.assertEqual(events[-1][1]["answer"], "Cedar [1]")
+        self.assertEqual(events[-1][1]["generation_token_usage"]["total_token_count"], 20)
+        self.assertEqual(save.call_args.args[2], "Cedar [1]")
+
+    def test_invalid_cached_answer_is_never_published(self):
+        events, save, _ = self.run_stream([chunk()], cached="Invalid [7]")
+        self.assertEqual([name for name, _ in events], ["sources", "error"])
+        save.assert_not_called()
+
+    def test_refusal_needs_no_citation_or_retry(self):
+        with patch.object(questions, "generate", return_value=iter([ai.REFUSAL])) as generate:
+            events, _, _ = self.run_stream([chunk()])
+        generate.assert_called_once()
+        self.assertEqual(events[-1][1]["cited_labels"], [])
+
+    def test_cache_failure_does_not_reject_valid_answer(self):
+        with patch.object(questions, "prepare", return_value=("key", "ver", None, [chunk()])), \
+                patch.object(questions, "save_answer", side_effect=RuntimeError("cache unavailable")), \
+                patch.object(questions, "connect", return_value=DB()):
+            events = frames(questions.stream_answer("question", DOC_A))
+        self.assertEqual([name for name, _ in events if name != "status"], ["sources", "done"])
+
+    def test_generation_finishes_before_answer_is_published(self):
+        finished = []
+
+        def generate(*args):
+            try:
+                yield "Cedar "
+                yield "[1]"
+            finally:
+                finished.append(True)
+
+        with patch.object(questions, "prepare", return_value=("key", "ver", None, [chunk()])), \
+                patch.object(questions, "generate", generate), \
+                patch.object(questions, "save_answer"), \
+                patch.object(questions, "connect", return_value=DB()):
+            stream = questions.stream_answer("question", DOC_A)
+            self.assertEqual(frames([next(stream)])[0][0], "sources")
+            self.assertEqual(finished, [])
+            self.assertEqual(frames(list(stream))[-1][0], "done")
+            self.assertEqual(finished, [True])
+            stream.close()
 
     def test_provider_error_after_partial_text_is_not_cached(self):
         def broken(*args):
@@ -202,6 +258,7 @@ class StreamingTests(unittest.TestCase):
         events, save, _ = self.run_stream([chunk()], generator=broken)
         self.assertEqual(events[-1][0], "error")
         self.assertFalse(any(name == "done" for name, _ in events))
+        self.assertFalse(any(name == "delta" for name, _ in events))
         save.assert_not_called()
 
 
