@@ -16,7 +16,7 @@ function ChatLoading() {
         <span />
       </div>
 
-      <span className="chat-loading-text">Thinking...</span>
+      <span className="chat-loading-text">Preparing answer and checking references...</span>
     </div>
   )
 }

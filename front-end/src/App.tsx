@@ -567,53 +567,6 @@ function App() {
             receivedSources = sources
           },
 
-          onDelta: (text) => {
-            if (!isCurrentRequest()) return
-
-            setResponsePhases((previous) => ({
-              ...previous,
-              [documentId]: 'streaming',
-            }))
-
-            setMessagesByDocument((previous) => {
-              const existingMessages =
-                previous[documentId] ?? []
-
-              const assistantExists = existingMessages.some(
-                (item) => item.id === assistantMessageId
-              )
-
-              if (!assistantExists) {
-                const assistantMessage: ChatMessage = {
-                  id: assistantMessageId,
-                  role: 'assistant',
-                  content: text,
-                  createdAt: new Date().toISOString(),
-                }
-
-                return {
-                  ...previous,
-                  [documentId]: [
-                    ...existingMessages,
-                    assistantMessage,
-                  ],
-                }
-              }
-
-              return {
-                ...previous,
-                [documentId]: existingMessages.map((item) =>
-                  item.id === assistantMessageId
-                    ? {
-                        ...item,
-                        content: item.content + text,
-                      }
-                    : item
-                ),
-              }
-            })
-          },
-
           onDone: (result) => {
             if (!isCurrentRequest()) return
 

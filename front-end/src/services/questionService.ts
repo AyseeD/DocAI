@@ -26,7 +26,6 @@ export type QuestionResult = {
 
 type StreamCallbacks = {
   onSources: (sources: Source[]) => void
-  onDelta: (text: string) => void
   onDone: (result: QuestionResult) => void
 }
 
@@ -133,10 +132,6 @@ export async function streamQuestion(
       }
 
       case 'delta': {
-        const data = JSON.parse(message.data) as {
-          text: string
-        }
-        callbacks.onDelta(data.text)
         break
       }
 
