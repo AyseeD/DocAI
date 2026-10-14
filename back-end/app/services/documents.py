@@ -9,7 +9,7 @@ def require_ready_document(document_id, db=None):
         with connect() as connection:
             return require_ready_document(document_id, db=connection)
     doc = db.execute(
-        "SELECT id,status,content_hash,processed_at FROM documents WHERE id=%s AND pipeline_version=%s",
+        "SELECT id,status,content_hash,processed_at FROM documents WHERE id=%s AND pipeline_version=%s AND deleted_at IS NULL",
         (document_id, PIPELINE),
     ).fetchone()
     if doc is None:

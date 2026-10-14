@@ -5,6 +5,7 @@ from uuid import uuid4
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from app.api.ai import PIPELINE, embed
+from app.services.file_deletions import cleanup_deleted_files
 from app.db.db import UPLOADS, connect, vector_literal
 
 logging.basicConfig(level=logging.INFO)
@@ -45,7 +46,7 @@ def process_one():
         # Lock remains held until processing commits. A worker crash releases it;
         # the queued row becomes available to another worker after rollback.
         doc = db.execute(
-            """SELECT * FROM documents WHERE status = 'queued'
+            """SELECT * FROM documents WHERE status = 'queued' AND deleted_at IS NULL
                 AND pipeline_version = %s ORDER BY created_at
                 FOR UPDATE SKIP LOCKED LIMIT 1""", (PIPELINE,)
         ).fetchone()
@@ -85,6 +86,7 @@ def process_one():
 if __name__ == "__main__":
     while True:
         try:
+            cleanup_deleted_files()
             if not process_one():
                 time.sleep(2)
         except Exception:

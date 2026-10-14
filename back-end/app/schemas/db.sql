@@ -10,6 +10,7 @@ CREATE TABLE documents(
     storage_key text NOT NULL UNIQUE,
     created_at timestamptz NOT NULL DEFAULT now(),
     processed_at timestamptz,
+    deleted_at timestamptz,
     pipeline_version text NOT NULL,
     error text,
     UNIQUE (content_hash, pipeline_version)
@@ -54,4 +55,10 @@ CREATE TABLE query_logs (
     cache_hit boolean NOT NULL,
     outcome text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Cleanup records survive process crashes between DB deletion and file removal.
+CREATE TABLE IF NOT EXISTS file_deletions (
+    document_id uuid PRIMARY KEY,
+    storage_key text NOT NULL UNIQUE
 );

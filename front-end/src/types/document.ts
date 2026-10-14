@@ -10,6 +10,7 @@ export type DocumentSummary = {
   created_at: string
   processed_at: string | null
   error: string | null
+  deleted_at?: string | null
 }
 
 // GET /documents/{doc_id} mime_type döndürmüyor.
