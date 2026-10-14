@@ -1,121 +1,22 @@
-/* Sidebar'ın ana yerleşimi ve içerik boşlukları */
+
+/* Sidebar layout */
+
 .sidebar {
   padding: 20px;
   border-right: 1px solid #e5e7eb;
   background: #ffffff;
+  min-width: 0;
 }
 
 .sidebar-logo {
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 32px;
+  color: #111827;
 }
 
-.add-document-button {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
-  font: inherit;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
+/* Home navigation */
 
-.add-document-button:hover {
-  background: #f9fafb;
-}
-
-.documents-section {
-  margin-top: 28px;
-}
-
-.documents-section h2 {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #6b7280;
-}
-
-/* Belge listesindeki öğeleri dikey olarak düzenler */
-.document-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-/* Belge seçiminde butonun varsayılan görünümünü sıfırlar */
-.document-item {
-  width: 100%;
-  padding: 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-/* Hover durumunda öğenin etkileşimli olduğunu gösterir */
-.document-item:hover {
-  background: #f9fafb;
-}
-
-/* Aktif belgenin diğer belgelerden ayırt edilmesini sağlar */
-.document-item.selected {
-  background: #f3f4f6;
-}
-
-/* Klavye ile gezinirken odaklanan öğeyi görünür kılar */
-.document-item:focus-visible {
-  outline: 2px solid #7076fe;
-  outline-offset: 2px;
-}
-
-.document-name {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.document-status {
-  margin-top: 3px;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.document-status.processing {
-  color: #6b7280;
-}
-
-.document-status.failed {
-  color: #b91c1c;
-}
-
-
-.document-list-message {
-  padding: 12px;
-  font-size: 13px;
-  color: #888;
-}
-
-.add-document-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.document-status.queued {
-  color: #b7791f;
-}
-
-
-/* Home navigasyon butonu */
 .sidebar-home-button {
   display: flex;
   align-items: center;
@@ -144,7 +45,217 @@
   font-weight: 600;
 }
 
+.sidebar-home-button:focus-visible {
+  outline: 2px solid #7076fe;
+  outline-offset: 2px;
+}
+
 .sidebar-home-button span:first-child {
   font-size: 19px;
   line-height: 1;
+}
+
+/* Add document */
+
+.add-document-button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.add-document-button:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+
+.add-document-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.add-document-button:focus-visible {
+  outline: 2px solid #7076fe;
+  outline-offset: 2px;
+}
+
+/* Documents section */
+
+.documents-section {
+  margin-top: 28px;
+}
+
+.documents-section h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.document-list-message {
+  padding: 12px;
+  font-size: 13px;
+  color: #888;
+}
+
+/* Document item */
+
+.document-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.document-item:hover {
+  background: #f9fafb;
+}
+
+.document-item.selected {
+  background: #f0f0ff;
+}
+
+.document-item:focus-visible {
+  outline: 2px solid #7076fe;
+  outline-offset: 2px;
+}
+
+.document-name {
+  width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #374151;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-item.selected .document-name {
+  color: #3538a0;
+  font-weight: 600;
+}
+
+/* Document status badges */
+
+.document-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+/* AI generating */
+
+.document-status.generating {
+  color: #5b5bd6;
+  background: #eeeeff;
+}
+
+/* Background answer completed */
+
+.document-status.answer-ready {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+/* Document ready */
+
+.document-status.ready {
+  color: #667085;
+  background: #f2f4f7;
+}
+
+/* Document processing */
+
+.document-status.queued {
+  color: #a16207;
+  background: #fef3c7;
+}
+
+/* Document failed */
+
+.document-status.failed {
+  color: #b42318;
+  background: #fee4e2;
+}
+
+/* Generating spinner */
+
+.status-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: status-spin 0.8s linear infinite;
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Completed answer check */
+
+.status-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Accessibility */
+
+@media (prefers-reduced-motion: reduce) {
+  .status-spinner {
+    animation: none;
+  }
+
+  .document-item,
+  .sidebar-home-button,
+  .add-document-button {
+    transition: none;
+  }
 }
