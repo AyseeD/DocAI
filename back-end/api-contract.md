@@ -7,7 +7,7 @@ Updated 2026-10-13 from the implemented routes. Local single-user application; n
 | Endpoint | Request | Success | Explicit errors |
 | --- | --- | --- | --- |
 | GET /health | None | 200: `status`, `ai_mode`; checks database | Database failure may return 500 |
-| POST /documents | Multipart `file` | 202: `id`, `status`, `duplicate` | 400 empty; 413 over 20 MiB; 415 extension/header; 422 invalid multipart |
+| POST /documents | Multipart `file`, optional `acknowledge_injection` (default false) | 202: `id`, `status`, `duplicate`; 200: `requires_confirmation: true` | 400 empty; 413 over 20 MiB; 415 extension/header; 422 invalid multipart or unreadable document text |
 | GET /documents | None | 200: document array, newest first, current pipeline | Database failure may return 500 |
 | GET /documents/{id} | UUID | 200: document detail | 404 missing/current pipeline mismatch; 422 invalid UUID |
 | POST /documents/{id}/retry | UUID, no body | 202: `id`, `status: queued` | 409 no failed document available (including absent ID); 422 invalid UUID |
@@ -15,7 +15,7 @@ Updated 2026-10-13 from the implemented routes. Local single-user application; n
 
 Document list and detail fields: `id`, `name`, `size`, `mime_type`, `status`, `created_at`, `processed_at`, `error`. IDs are UUID strings; timestamps are ISO-8601. `processed_at` and `error` are nullable. Status is `queued`, `ready`, or `failed`; queued includes active worker processing. Poll queued documents (the frontend currently uses about two seconds).
 
-Uploads accept PDF and UTF-8 TXT up to and including 20 × 1024 × 1024 bytes. PDF header validation happens at upload; parsing, decoding, page/chunk limits and no-text checks happen in the worker. A malformed file can therefore be accepted and later fail. Duplicate content in the same pipeline returns its existing ID/status and removes the redundant file. Retry clears error and processed timestamp; invalid source content must be corrected and uploaded as a new file.
+Uploads accept PDF and UTF-8 TXT up to and including 20 × 1024 × 1024 bytes. PDF header validation, text extraction, decoding and the 200-page limit are checked before queuing. Chunk limits and no-text checks remain in the worker. A local heuristic scans extracted text for instruction overrides, secret/prompt disclosure and role spoofing. A flagged upload returns `200 {"requires_confirmation": true}` without inserting a database row and deletes its temporary file. Canceling discards the browser’s pending file; continuing resubmits it with `acknowledge_injection=true`. Existing AI safeguards remain unchanged. The scan may flag quoted examples and miss obfuscated, non-English, or image-only instructions; it is not a security guarantee. Duplicate content in the same pipeline returns its existing ID/status and removes the redundant file. Retry clears error and processed timestamp; invalid source content must be corrected and uploaded as a new file.
 
 Questions require a nonblank string of at most 2000 characters before whitespace normalization and a document UUID. The document must be ready before SSE opens. Retrieval and caches are scoped to that document and pipeline. Explicit HTTP errors have a string `detail`; FastAPI 422 validation errors have an array `detail`.
 

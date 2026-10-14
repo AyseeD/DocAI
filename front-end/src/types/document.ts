@@ -16,7 +16,8 @@ export type DocumentSummary = {
 export type DocumentDetail = Omit<DocumentSummary, 'mime_type'>
 
 // POST /documents yanıtı.
-export type UploadDocumentResponse = {
+export type UploadDocumentResponse = { requires_confirmation: true } | {
+  requires_confirmation?: false
   id: string
   status: DocumentStatus
   duplicate: boolean

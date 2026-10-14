@@ -53,10 +53,12 @@ export async function getDocuments(): Promise<DocumentSummary[]> {
 // Seçilen dosyayı backend'e gönderir.
 export async function uploadDocument(
   file: File,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  acknowledgeInjection = false
 ): Promise<UploadDocumentResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('acknowledge_injection', String(acknowledgeInjection))
 
   const response = await fetch(`${API_BASE_URL}/documents`, {
     method: 'POST',

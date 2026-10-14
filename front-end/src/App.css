@@ -132,3 +132,22 @@
   color: #6b7280;
   margin: 8px 0 16px;
 }
+
+.injection-warning {
+  width: min(460px, calc(100vw - 48px));
+  box-sizing: border-box;
+  padding: 28px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 20px 60px #11182733;
+}
+.injection-warning::backdrop { background: #11182770; }
+.injection-warning h2 { margin: 0 0 12px; font-size: 20px; }
+.injection-warning p { font-size: 14px; line-height: 1.6; color: #6b7280; }
+.injection-warning .injection-file { color: #111827; font-weight: 600; overflow-wrap: anywhere; }
+.injection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.injection-actions button { padding: 10px 16px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; cursor: pointer; font: inherit; font-size: 14px; }
+.injection-actions .injection-confirm { background: #7076fe; border-color: #7076fe; color: #fff; }
+.injection-actions button:focus-visible { outline: 2px solid #7076fe; outline-offset: 3px; }

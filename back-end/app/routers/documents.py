@@ -1,7 +1,10 @@
 """Document upload, list, status, and retry endpoints."""
 import hashlib
 from uuid import UUID, uuid4
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile, Form
+from fastapi.responses import JSONResponse
+from app.services.worker import extract, DocumentProcessingError
+from app.services.injection_scan import has_possible_injection
 from app.db.db import UPLOADS, connect
 from app.api.ai import PIPELINE
 
@@ -9,7 +12,7 @@ router = APIRouter(tags=["documents"])
 
 #upload a file, checks for mime type (PDF and TXT), max size is 20 MiB, and adds the file into db
 @router.post("/documents", status_code=202)
-def uploadFile(file:UploadFile):
+def uploadFile(file: UploadFile, acknowledge_injection: bool = Form(False)):
     name = (file.filename or "upload").replace("\\", "/").rsplit("/", 1)[-1][:255]
     suffix = name.lower().rsplit(".", 1)[-1]
     mime = {"pdf": "application/pdf", "txt": "text/plain"}.get(suffix)
@@ -36,6 +39,17 @@ def uploadFile(file:UploadFile):
         with path.open("rb") as source:
             if suffix == "pdf" and not source.read(1024).lstrip().startswith(b"%PDF-"):
                 raise HTTPException(415, "File does not have a PDF header")
+        try:
+            pages = extract(path, mime)
+        except DocumentProcessingError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(422, "Could not scan document text. Upload a valid PDF or UTF-8 TXT file.") from exc
+        if has_possible_injection(pages) and not acknowledge_injection:
+            # No database row exists yet, so no worker can ingest this file.
+            # The finally block deletes this copy before the response is sent.
+            return JSONResponse(status_code=200, content={"requires_confirmation": True})
+
         with connect() as db:
             row = db.execute(
                 """INSERT INTO documents

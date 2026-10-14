@@ -1,5 +1,6 @@
 
 import { useEffect, useRef, useState } from 'react'
+import InjectionWarning from './components/InjectionWarning'
 import Sidebar from './components/Sidebar/Sidebar'
 import ChatInput from './components/Chat/ChatInput'
 import ChatWindow from './components/Chat/ChatWindow'
@@ -41,6 +42,7 @@ function App() {
   >(initialState.messagesByDocument)
 
   const [isUploading, setIsUploading] = useState(false)
+  const [pendingUpload, setPendingUpload] = useState<File | null>(null)
 
   const [retryingDocumentId, setRetryingDocumentId] =
     useState<string | null>(null)
@@ -216,7 +218,7 @@ function App() {
     setFeedback(null)
   }
 
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = async (file: File, acknowledgeInjection = false) => {
     if (uploadInProgressRef.current) return
 
     if (!/\.(pdf|txt)$/i.test(file.name)) {
@@ -251,7 +253,11 @@ function App() {
     setFeedback(null)
 
     try {
-      const uploadResult = await uploadDocument(file)
+      const uploadResult = await uploadDocument(file, undefined, acknowledgeInjection)
+      if (uploadResult.requires_confirmation) {
+        setPendingUpload(file)
+        return
+      }
       const backendDocuments = await getDocuments()
 
       setDocuments(backendDocuments)
@@ -505,6 +511,20 @@ function App() {
 
   return (
     <div className="app">
+      {pendingUpload && (
+        <InjectionWarning
+          fileName={pendingUpload.name}
+          onCancel={() => {
+            setPendingUpload(null)
+            setFeedback({ type: 'success', title: 'Upload canceled', message: 'The document was deleted.' })
+          }}
+          onConfirm={() => {
+            const file = pendingUpload
+            setPendingUpload(null)
+            void handleFileSelect(file, true)
+          }}
+        />
+      )}
       <Sidebar
         documents={documents}
         selectedDocumentId={selectedDocumentId}
