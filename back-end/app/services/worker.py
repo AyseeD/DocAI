@@ -5,7 +5,7 @@ from uuid import uuid4
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from app.api.ai import PIPELINE, embed
-from app.services.file_deletions import cleanup_deleted_files
+from app.services.file_deletions import cleanup_deleted_files, purge_expired_trash
 from app.db.db import UPLOADS, connect, vector_literal
 
 logging.basicConfig(level=logging.INFO)
@@ -86,6 +86,7 @@ def process_one():
 if __name__ == "__main__":
     while True:
         try:
+            purge_expired_trash()
             cleanup_deleted_files()
             if not process_one():
                 time.sleep(2)

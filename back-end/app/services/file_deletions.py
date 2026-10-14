@@ -24,3 +24,29 @@ def cleanup_deleted_files(document_ids=None):
                 continue
             db.execute('DELETE FROM file_deletions WHERE document_id=%s', (row['document_id'],))
         return complete
+
+
+def permanently_delete_documents(db, rows):
+    """Caller locks document rows; all database changes share its transaction."""
+    for row in rows:
+        db.execute(
+            'INSERT INTO file_deletions(document_id,storage_key) VALUES (%s,%s) ON CONFLICT DO NOTHING',
+            (row['id'], row['storage_key']),
+        )
+    ids = [row['id'] for row in rows]
+    db.execute('DELETE FROM query_logs WHERE document_id = ANY(%s)', (ids,))
+    db.execute('DELETE FROM documents WHERE id = ANY(%s)', (ids,))
+    # Foreign keys cascade to extracted chunks, answers, and citations.
+
+
+def purge_expired_trash():
+    """Purge up to 100 documents older than ten elapsed days, across pipelines."""
+    with connect() as db:
+        rows = db.execute(
+            """SELECT id,storage_key FROM documents
+               WHERE deleted_at < now() - interval '240 hours'
+               ORDER BY deleted_at,id LIMIT 100 FOR UPDATE SKIP LOCKED"""
+        ).fetchall()
+        if rows:
+            permanently_delete_documents(db, rows)
+    return len(rows)

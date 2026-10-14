@@ -101,8 +101,6 @@ function Sidebar({
 
           {documents.map((document) => {
             const isSelected = !isTrashOpen && selectedDocumentId === document.id
-            const isSelected =
-              selectedDocumentId === document.id
 
             const isGenerating =
               Boolean(responsePhases[document.id])
@@ -120,51 +118,51 @@ function Sidebar({
 
             return (
               <div className="sidebar-document-row" key={document.id}>
-              <button
-                type="button"
-                className={`document-item ${
-                  isSelected ? 'selected' : ''
-                }`}
-                onClick={() => onSelectDocument(document.id)}
-                aria-pressed={isSelected}
-              >
-                <div className="document-name">
-                  {document.name}
-                </div>
-
-                <div
-                  className={`document-status ${statusClass}`}
+                <button
+                  type="button"
+                  className={`document-item ${
+                    isSelected ? 'selected' : ''
+                  }`}
+                  onClick={() => onSelectDocument(document.id)}
+                  aria-pressed={isSelected}
                 >
-                  {isGenerating ? (
-                    <>
-                      <span
-                        className="status-spinner"
-                        aria-hidden="true"
-                      />
-                      <span>Generating</span>
-                    </>
-                  ) : hasUnreadAnswer ? (
-                    <>
-                      <span
-                        className="status-check"
-                        aria-hidden="true"
-                      >
-                        ✓
-                      </span>
-                      <span>Answer ready</span>
-                    </>
-                  ) : document.status === 'queued' ? (
-                    <span>Processing</span>
-                  ) : document.status === 'ready' ? (
-                    <span>Ready</span>
-                  ) : document.status === 'failed' ? (
-                    <span>Failed</span>
-                  ) : (
-                    <span>{document.status}</span>
-                  )}
-                </div>
-              </button>
-              <DocumentMenu name={document.name} disabled={isChangingDocuments} onDelete={() => onDeleteDocument(document.id)} />
+                  <div className="document-name">
+                    {document.name}
+                  </div>
+
+                  <div
+                    className={`document-status ${statusClass}`}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <span
+                          className="status-spinner"
+                          aria-hidden="true"
+                        />
+                        <span>Generating</span>
+                      </>
+                    ) : hasUnreadAnswer ? (
+                      <>
+                        <span
+                          className="status-check"
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
+                        <span>Answer ready</span>
+                      </>
+                    ) : document.status === 'queued' ? (
+                      <span>Processing</span>
+                    ) : document.status === 'ready' ? (
+                      <span>Ready</span>
+                    ) : document.status === 'failed' ? (
+                      <span>Failed</span>
+                    ) : (
+                      <span>{document.status}</span>
+                    )}
+                  </div>
+                </button>
+                <DocumentMenu name={document.name} disabled={isChangingDocuments} onDelete={() => onDeleteDocument(document.id)} />
               </div>
             )
           })}

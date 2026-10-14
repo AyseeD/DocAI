@@ -10,7 +10,7 @@ export default function TrashView({ documents, busy, loading, error, onRefresh, 
   const allSelected = documents.length > 0 && ids.length === documents.length
   return <section className="trash-view" aria-label="Deleted documents">
     <h2><TrashIcon /> Trash</h2>
-    <p>Restore documents with their chats, or delete them permanently.</p>
+    <p>Items in Trash are automatically deleted permanently after 10 days. Restore them before then to keep their documents and chats.</p>
     {error && <p role="alert">{error} <button onClick={onRefresh} disabled={loading}>Try again</button></p>}
     {loading ? <p role="status">Loading Trash…</p> : documents.length === 0 ? <p>Trash is empty.</p> : <>
       <div className="trash-toolbar">

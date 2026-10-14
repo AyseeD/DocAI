@@ -22,6 +22,7 @@ def migrate():
         db.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS deleted_at timestamptz")
         db.execute("""CREATE TABLE IF NOT EXISTS file_deletions (
             document_id uuid PRIMARY KEY, storage_key text NOT NULL UNIQUE)""")
+        db.execute("CREATE INDEX IF NOT EXISTS documents_deleted_at_idx ON documents(deleted_at) WHERE deleted_at IS NOT NULL")
         # Legacy unscoped cache entries stay intact but cannot match new requests.
         db.execute("CREATE INDEX IF NOT EXISTS answer_cache_document_idx ON answer_cache(document_id)")
         db.execute("CREATE INDEX IF NOT EXISTS query_logs_document_idx ON query_logs(document_id, created_at)")

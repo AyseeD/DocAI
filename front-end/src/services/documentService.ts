@@ -102,3 +102,13 @@ export async function changeDocuments(documentIds: string[], action: DocumentAct
   })
   await handleResponse(response)
 }
+
+// Used to discard browser-local chats after server-side permanent deletion.
+export async function getRetainedDocumentIds(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/documents/retained-ids`)
+  const ids = await handleResponse<unknown>(response)
+  if (!Array.isArray(ids) || !ids.every(id => typeof id === 'string')) {
+    throw new Error('Invalid document retention response')
+  }
+  return ids
+}

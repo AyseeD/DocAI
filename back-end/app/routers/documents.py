@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, Form
 from fastapi.responses import JSONResponse
 from app.services.worker import extract, DocumentProcessingError
 from app.services.injection_scan import has_possible_injection
-from app.services.file_deletions import cleanup_deleted_files
+from app.services.file_deletions import cleanup_deleted_files, permanently_delete_documents
 from app.db.db import UPLOADS, connect
 from app.api.ai import PIPELINE
 
@@ -86,6 +86,15 @@ def list_docs(trashed: bool = False):
             (PIPELINE, trashed),
         ).fetchall()
 
+@router.get('/documents/retained-ids')
+def retained_document_ids():
+    # Include active and trashed records from all pipelines so clients do not
+    # discard restorable chats or histories belonging to an older pipeline.
+    with connect() as db:
+        rows = db.execute('SELECT id FROM documents').fetchall()
+    return [row['id'] for row in rows]
+
+
 #get the document with the given id
 @router.get("/documents/{doc_id}")
 def document(doc_id: UUID):
@@ -133,18 +142,7 @@ def document_action(body: DocumentAction):
         if body.action == 'delete':
             if any(row['deleted_at'] is None for row in rows):
                 raise HTTPException(409, 'Move documents to Trash before deleting permanently.')
-            # Persist cleanup work atomically with deletion; failed file removal
-            # can be retried by this endpoint or the worker after a crash.
-            for row in rows:
-                db.execute(
-                    'INSERT INTO file_deletions(document_id,storage_key) VALUES (%s,%s) ON CONFLICT DO NOTHING',
-                    (row['id'], row['storage_key']),
-                )
-            # Logs otherwise retain questions through ON DELETE SET NULL.
-            existing_ids = [row['id'] for row in rows]
-            db.execute('DELETE FROM query_logs WHERE document_id = ANY(%s)', (existing_ids,))
-            db.execute('DELETE FROM documents WHERE id = ANY(%s)', (existing_ids,))
-            # FK cascades remove chunks, cached answers, and cached citations.
+            permanently_delete_documents(db, rows)
         elif body.action == 'trash':
             db.execute('UPDATE documents SET deleted_at=COALESCE(deleted_at,now()) WHERE id = ANY(%s)', (ids,))
         else:

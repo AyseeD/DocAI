@@ -62,3 +62,5 @@ CREATE TABLE IF NOT EXISTS file_deletions (
     document_id uuid PRIMARY KEY,
     storage_key text NOT NULL UNIQUE
 );
+
+CREATE INDEX IF NOT EXISTS documents_deleted_at_idx ON documents(deleted_at) WHERE deleted_at IS NOT NULL;

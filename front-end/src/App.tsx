@@ -10,6 +10,7 @@ import HomeWorkspace from './components/Home/HomeWorkspace'
 import { loadMockState, saveMockState } from './data/mockStorage'
 import {
   getDocuments,
+  getRetainedDocumentIds,
   changeDocuments,
   type DocumentAction,
   uploadDocument,
@@ -151,6 +152,31 @@ function App() {
     }
   }, [])
 
+  // Server-side expiry also removes local chat copies when this browser is open.
+  useEffect(() => {
+    let active = true
+    let inProgress = false
+    const reconcileDeletedDocuments = async () => {
+      if (inProgress || documentMutationRef.current || uploadInProgressRef.current) return
+      inProgress = true
+      const revision = documentRevisionRef.current
+      try {
+        const retainedIds = new Set(await getRetainedDocumentIds())
+        if (!active || revision !== documentRevisionRef.current || documentMutationRef.current || uploadInProgressRef.current) return
+        setMessagesByDocument(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => retainedIds.has(id))))
+        setTrashedDocuments(previous => previous.filter(doc => retainedIds.has(doc.id)))
+      } catch (error) {
+        // Never discard history when the retention check fails.
+        console.error('Document retention check failed:', error)
+      } finally {
+        inProgress = false
+      }
+    }
+    void reconcileDeletedDocuments()
+    const interval = setInterval(() => { void reconcileDeletedDocuments() }, 60_000)
+    return () => { active = false; clearInterval(interval) }
+  }, [])
+
   // İşlenmekte olan belgelerin durumunu yenile.
   useEffect(() => {
     if (!documents.some((document) => document.status === 'queued')) {
@@ -219,30 +245,6 @@ function App() {
   const isCurrentDocumentStreaming =
     currentResponsePhase === 'streaming'
 
-  // Belge değiştiğinde eski SSE akışını durduruyoruz.
-  const selectDocument = (documentId: string | null) => {
-    setIsTrashOpen(false)
-    if (selectedDocumentIdRef.current !== documentId) {
-      // Eski SSE isteğini geçersiz kılıyoruz.
-      streamRequestIdRef.current += 1
-
-      // Devam eden ağ isteğini iptal ediyoruz.
-      streamControllerRef.current?.abort()
-      streamControllerRef.current = null
-
-      // İptal edilen isteğin yarım assistant yanıtını siliyoruz.
-      const pending = pendingAssistantRef.current
-
-      if (pending) {
-        setMessagesByDocument((previous) => ({
-          ...previous,
-          [pending.documentId]: (
-            previous[pending.documentId] ?? []
-          ).filter((item) => item.id !== pending.messageId),
-        }))
-
-        pendingAssistantRef.current = null
-      }
   const isCurrentDocumentResponding =
     currentResponsePhase !== undefined
 
@@ -252,6 +254,7 @@ function App() {
 
   // Belge değiştir; diğer belgelerin isteklerine dokunma.
   const selectDocument = (documentId: string | null) => {
+    setIsTrashOpen(false)
     selectedDocumentIdRef.current = documentId
     setSelectedDocumentId(documentId)
 
@@ -291,6 +294,30 @@ function App() {
     setDeleteRequest({ ids, permanent })
   }
 
+  // Cancel only deleted documents; navigation keeps background answers running.
+  const cancelDocumentResponses = (ids: string[]) => {
+    const pendingMessages = new Map<string, string>()
+    for (const id of ids) {
+      streamRequestIdsRef.current[id] = (streamRequestIdsRef.current[id] ?? 0) + 1
+      streamControllersRef.current[id]?.abort()
+      delete streamControllersRef.current[id]
+      delete responseInProgressRef.current[id]
+      const pendingMessage = pendingAssistantsRef.current[id]
+      if (pendingMessage) pendingMessages.set(id, pendingMessage)
+      delete pendingAssistantsRef.current[id]
+    }
+    setMessagesByDocument(previous => {
+      const updated = { ...previous }
+      for (const [id, messageId] of pendingMessages) {
+        if (updated[id]) updated[id] = updated[id].filter(message => message.id !== messageId)
+      }
+      return updated
+    })
+    setResponsePhases(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
+    setResponseErrors(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
+    setUnreadAnswers(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
+  }
+
   const performDocumentAction = async (ids: string[], action: DocumentAction) => {
     if (documentMutationRef.current) return
     documentMutationRef.current = true
@@ -301,6 +328,7 @@ function App() {
     setDeleteError(null)
     try {
       await changeDocuments(ids, action)
+      if (action !== 'restore') cancelDocumentResponses(ids)
       if (action === 'trash') {
         const moved = documents.filter(doc => ids.includes(doc.id)).map(doc => ({ ...doc, deleted_at: new Date().toISOString() }))
         setTrashedDocuments(previous => [...moved, ...previous.filter(doc => !ids.includes(doc.id))])
@@ -359,6 +387,7 @@ function App() {
     }
 
     uploadInProgressRef.current = true
+    documentRevisionRef.current += 1
     setIsUploading(true)
     setFeedback(null)
 
@@ -391,6 +420,7 @@ function App() {
       })
     } finally {
       uploadInProgressRef.current = false
+      documentRevisionRef.current += 1
       setIsUploading(false)
     }
   }
@@ -741,9 +771,6 @@ function App() {
           </div>
         )}
 
-        {isTrashOpen ? (
-          <TrashView documents={trashedDocuments} busy={isChangingDocuments} loading={trashLoading} error={trashError} onRefresh={() => { void refreshTrash() }} onRestore={ids => { void performDocumentAction(ids, 'restore') }} onDelete={ids => requestDelete(ids, true)} />
-        ) : selectedDocumentId === null ? (
         {currentResponseError && (
           <div
             className="file-feedback error"
@@ -775,7 +802,17 @@ function App() {
           </div>
         )}
 
-        {selectedDocumentId === null ? (
+        {isTrashOpen ? (
+          <TrashView
+            documents={trashedDocuments}
+            busy={isChangingDocuments}
+            loading={trashLoading}
+            error={trashError}
+            onRefresh={() => { void refreshTrash() }}
+            onRestore={ids => { void performDocumentAction(ids, 'restore') }}
+            onDelete={ids => requestDelete(ids, true)}
+          />
+        ) : selectedDocumentId === null ? (
           <HomeWorkspace
             onFileSelect={handleFileSelect}
             isUploading={isUploading}
