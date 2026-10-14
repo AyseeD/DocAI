@@ -1,7 +1,13 @@
 """Document upload, list, status, and retry endpoints."""
 import hashlib
 from uuid import UUID, uuid4
-from fastapi import APIRouter, HTTPException, UploadFile
+from typing import Literal
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, UploadFile, Form
+from fastapi.responses import JSONResponse
+from app.services.worker import extract, DocumentProcessingError
+from app.services.injection_scan import has_possible_injection
+from app.services.file_deletions import cleanup_deleted_files
 from app.db.db import UPLOADS, connect
 from app.api.ai import PIPELINE
 
@@ -9,7 +15,7 @@ router = APIRouter(tags=["documents"])
 
 #upload a file, checks for mime type (PDF and TXT), max size is 20 MiB, and adds the file into db
 @router.post("/documents", status_code=202)
-def uploadFile(file:UploadFile):
+def uploadFile(file: UploadFile, acknowledge_injection: bool = Form(False)):
     name = (file.filename or "upload").replace("\\", "/").rsplit("/", 1)[-1][:255]
     suffix = name.lower().rsplit(".", 1)[-1]
     mime = {"pdf": "application/pdf", "txt": "text/plain"}.get(suffix)
@@ -36,6 +42,17 @@ def uploadFile(file:UploadFile):
         with path.open("rb") as source:
             if suffix == "pdf" and not source.read(1024).lstrip().startswith(b"%PDF-"):
                 raise HTTPException(415, "File does not have a PDF header")
+        try:
+            pages = extract(path, mime)
+        except DocumentProcessingError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(422, "Could not scan document text. Upload a valid PDF or UTF-8 TXT file.") from exc
+        if has_possible_injection(pages) and not acknowledge_injection:
+            # No database row exists yet, so no worker can ingest this file.
+            # The finally block deletes this copy before the response is sent.
+            return JSONResponse(status_code=200, content={"requires_confirmation": True})
+
         with connect() as db:
             row = db.execute(
                 """INSERT INTO documents
@@ -47,9 +64,11 @@ def uploadFile(file:UploadFile):
             ).fetchone()
             if row is None:
                 row = db.execute(
-                    "SELECT id,status FROM documents WHERE content_hash=%s AND pipeline_version=%s",
+                    "SELECT id,status,deleted_at FROM documents WHERE content_hash=%s AND pipeline_version=%s",
                     (content_hash.hexdigest(), PIPELINE,)
                 ).fetchone()
+        if row.get("deleted_at") is not None:
+            raise HTTPException(409, "This document is in Trash. Restore it there before uploading again.")
         keep_file = row["id"] == doc_id
         return {**row, "duplicate": not keep_file}
     finally:
@@ -58,12 +77,13 @@ def uploadFile(file:UploadFile):
             path.unlink(missing_ok=True)
 
 @router.get("/documents")
-def list_docs():
+def list_docs(trashed: bool = False):
     with connect() as db:
         return db.execute(
-            """SELECT id,name,size,mime_type,status,created_at,processed_at,error
-                FROM documents WHERE pipeline_version=%s ORDER BY created_at DESC""",
-            (PIPELINE,),
+            """SELECT id,name,size,mime_type,status,created_at,processed_at,error,deleted_at
+                FROM documents WHERE pipeline_version=%s AND (deleted_at IS NOT NULL) = %s
+                ORDER BY created_at DESC""",
+            (PIPELINE, trashed),
         ).fetchall()
 
 #get the document with the given id
@@ -72,7 +92,7 @@ def document(doc_id: UUID):
     with connect() as db:
         row = db.execute(
             """SELECT id,name,size,mime_type,status,error,created_at,processed_at FROM documents
-               WHERE id=%s AND pipeline_version=%s""", (doc_id, PIPELINE,)
+               WHERE id=%s AND pipeline_version=%s AND deleted_at IS NULL""", (doc_id, PIPELINE,)
         ).fetchone()
     if row is None:
         raise HTTPException(404, "Document not found")
@@ -84,10 +104,51 @@ def retry_document(doc_id: UUID):
     with connect() as db:
         row = db.execute(
             """UPDATE documents SET status='queued',error=NULL,processed_at=NULL
-               WHERE id=%s AND pipeline_version=%s AND status='failed' RETURNING id,status""",
+               WHERE id=%s AND pipeline_version=%s AND deleted_at IS NULL AND status='failed' RETURNING id,status""",
             (doc_id, PIPELINE,),
         ).fetchone()
     if row is None:
         raise HTTPException(409, "No failed document available to retry")
     return row
 
+
+
+class DocumentAction(BaseModel):
+    action: Literal['trash', 'restore', 'delete']
+    document_ids: list[UUID] = Field(min_length=1, max_length=1000)
+
+
+@router.post('/documents/actions')
+def document_action(body: DocumentAction):
+    ids = sorted(set(body.document_ids))
+    with connect() as db:
+        # Serialize against ingestion and concurrent restore/delete actions.
+        rows = db.execute(
+            """SELECT id,storage_key,deleted_at FROM documents
+               WHERE id = ANY(%s) AND pipeline_version=%s ORDER BY id FOR UPDATE""",
+            (ids, PIPELINE),
+        ).fetchall()
+        if body.action != 'delete' and len(rows) != len(ids):
+            raise HTTPException(404, 'One or more documents no longer exist. Refresh and try again.')
+        if body.action == 'delete':
+            if any(row['deleted_at'] is None for row in rows):
+                raise HTTPException(409, 'Move documents to Trash before deleting permanently.')
+            # Persist cleanup work atomically with deletion; failed file removal
+            # can be retried by this endpoint or the worker after a crash.
+            for row in rows:
+                db.execute(
+                    'INSERT INTO file_deletions(document_id,storage_key) VALUES (%s,%s) ON CONFLICT DO NOTHING',
+                    (row['id'], row['storage_key']),
+                )
+            # Logs otherwise retain questions through ON DELETE SET NULL.
+            existing_ids = [row['id'] for row in rows]
+            db.execute('DELETE FROM query_logs WHERE document_id = ANY(%s)', (existing_ids,))
+            db.execute('DELETE FROM documents WHERE id = ANY(%s)', (existing_ids,))
+            # FK cascades remove chunks, cached answers, and cached citations.
+        elif body.action == 'trash':
+            db.execute('UPDATE documents SET deleted_at=COALESCE(deleted_at,now()) WHERE id = ANY(%s)', (ids,))
+        else:
+            db.execute('UPDATE documents SET deleted_at=NULL WHERE id = ANY(%s)', (ids,))
+    if body.action == 'delete' and not cleanup_deleted_files(ids):
+        raise HTTPException(503, 'Records deleted; file cleanup is pending. Retry to finish deletion.')
+    return {'document_ids': ids, 'action': body.action}

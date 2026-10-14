@@ -1,5 +1,8 @@
 
 import { useEffect, useRef, useState } from 'react'
+import DeleteConfirmation from './components/DeleteConfirmation'
+import TrashView from './components/TrashView'
+import InjectionWarning from './components/InjectionWarning'
 import Sidebar from './components/Sidebar/Sidebar'
 import ChatInput from './components/Chat/ChatInput'
 import ChatWindow from './components/Chat/ChatWindow'
@@ -7,6 +10,8 @@ import HomeWorkspace from './components/Home/HomeWorkspace'
 import { loadMockState, saveMockState } from './data/mockStorage'
 import {
   getDocuments,
+  changeDocuments,
+  type DocumentAction,
   uploadDocument,
   retryDocument,
 } from './services/documentService'
@@ -34,6 +39,16 @@ function App() {
 
   const [documents, setDocuments] = useState<DocumentSummary[]>([])
   const [isDocumentsLoading, setIsDocumentsLoading] = useState(true)
+  const [isTrashOpen, setIsTrashOpen] = useState(false)
+  const [trashedDocuments, setTrashedDocuments] = useState<DocumentSummary[]>([])
+  const [trashLoading, setTrashLoading] = useState(false)
+  const [trashError, setTrashError] = useState<string | null>(null)
+  const [isChangingDocuments, setIsChangingDocuments] = useState(false)
+  const [deleteRequest, setDeleteRequest] = useState<{ ids: string[]; permanent: boolean } | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const documentMutationRef = useRef(false)
+  const documentRevisionRef = useRef(0)
+  const trashRequestRef = useRef(0)
 
   const [selectedDocumentId, setSelectedDocumentId] =
     useState<string | null>(null)
@@ -43,6 +58,7 @@ function App() {
   >(initialState.messagesByDocument)
 
   const [isUploading, setIsUploading] = useState(false)
+  const [pendingUpload, setPendingUpload] = useState<File | null>(null)
 
   const [retryingDocumentId, setRetryingDocumentId] =
     useState<string | null>(null)
@@ -149,10 +165,11 @@ function App() {
 
       requestInProgress = true
 
+      const revision = documentRevisionRef.current
       try {
         const updatedDocuments = await getDocuments()
 
-        if (isActive) {
+        if (isActive && revision === documentRevisionRef.current && !documentMutationRef.current) {
           setDocuments(updatedDocuments)
         }
       } catch (error) {
@@ -202,6 +219,30 @@ function App() {
   const isCurrentDocumentStreaming =
     currentResponsePhase === 'streaming'
 
+  // Belge değiştiğinde eski SSE akışını durduruyoruz.
+  const selectDocument = (documentId: string | null) => {
+    setIsTrashOpen(false)
+    if (selectedDocumentIdRef.current !== documentId) {
+      // Eski SSE isteğini geçersiz kılıyoruz.
+      streamRequestIdRef.current += 1
+
+      // Devam eden ağ isteğini iptal ediyoruz.
+      streamControllerRef.current?.abort()
+      streamControllerRef.current = null
+
+      // İptal edilen isteğin yarım assistant yanıtını siliyoruz.
+      const pending = pendingAssistantRef.current
+
+      if (pending) {
+        setMessagesByDocument((previous) => ({
+          ...previous,
+          [pending.documentId]: (
+            previous[pending.documentId] ?? []
+          ).filter((item) => item.id !== pending.messageId),
+        }))
+
+        pendingAssistantRef.current = null
+      }
   const isCurrentDocumentResponding =
     currentResponsePhase !== undefined
 
@@ -231,7 +272,63 @@ function App() {
     setFeedback(null)
   }
 
-  const handleFileSelect = async (file: File) => {
+  const refreshTrash = async () => {
+    const request = ++trashRequestRef.current
+    setTrashLoading(true)
+    setTrashError(null)
+    try {
+      const items = await getDocuments(true)
+      if (request === trashRequestRef.current) setTrashedDocuments(items)
+    } catch (error) {
+      if (request === trashRequestRef.current) setTrashError(error instanceof Error ? error.message : 'Could not load Trash.')
+    } finally {
+      if (request === trashRequestRef.current) setTrashLoading(false)
+    }
+  }
+
+  const requestDelete = (ids: string[], permanent: boolean) => {
+    setDeleteError(null)
+    setDeleteRequest({ ids, permanent })
+  }
+
+  const performDocumentAction = async (ids: string[], action: DocumentAction) => {
+    if (documentMutationRef.current) return
+    documentMutationRef.current = true
+    documentRevisionRef.current += 1
+    trashRequestRef.current += 1
+    setTrashLoading(false)
+    setIsChangingDocuments(true)
+    setDeleteError(null)
+    try {
+      await changeDocuments(ids, action)
+      if (action === 'trash') {
+        const moved = documents.filter(doc => ids.includes(doc.id)).map(doc => ({ ...doc, deleted_at: new Date().toISOString() }))
+        setTrashedDocuments(previous => [...moved, ...previous.filter(doc => !ids.includes(doc.id))])
+        setDocuments(previous => previous.filter(doc => !ids.includes(doc.id)))
+        if (selectedDocumentIdRef.current && ids.includes(selectedDocumentIdRef.current)) selectDocument(null)
+      } else {
+        setTrashedDocuments(previous => previous.filter(doc => !ids.includes(doc.id)))
+        if (action === 'restore') {
+          const restored = trashedDocuments.filter(doc => ids.includes(doc.id)).map(doc => ({ ...doc, deleted_at: null }))
+          setDocuments(previous => [...previous.filter(doc => !ids.includes(doc.id)), ...restored].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+        } else {
+          setMessagesByDocument(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
+        }
+      }
+      setDeleteRequest(null)
+      setFeedback({ type: 'success', title: action === 'trash' ? 'Moved to Trash' : action === 'restore' ? 'Restored' : 'Deleted permanently', message: `${ids.length} document${ids.length === 1 ? '' : 's'} and associated chats ${action === 'restore' ? 'restored.' : action === 'trash' ? 'moved to Trash.' : 'deleted.'}` })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not update documents.'
+      if (action !== 'restore') setDeleteError(message)
+      else setFeedback({ type: 'error', title: 'Restore failed', message })
+    } finally {
+      documentMutationRef.current = false
+      documentRevisionRef.current += 1
+      setIsChangingDocuments(false)
+    }
+  }
+
+  const handleFileSelect = async (file: File, acknowledgeInjection = false) => {
     if (uploadInProgressRef.current) return
 
     if (!/\.(pdf|txt)$/i.test(file.name)) {
@@ -266,7 +363,11 @@ function App() {
     setFeedback(null)
 
     try {
-      const uploadResult = await uploadDocument(file)
+      const uploadResult = await uploadDocument(file, undefined, acknowledgeInjection)
+      if (uploadResult.requires_confirmation) {
+        setPendingUpload(file)
+        return
+      }
       const backendDocuments = await getDocuments()
 
       setDocuments(backendDocuments)
@@ -575,7 +676,26 @@ function App() {
 
   return (
     <div className="app">
+      {deleteRequest && <DeleteConfirmation count={deleteRequest.ids.length} permanent={deleteRequest.permanent} busy={isChangingDocuments} error={deleteError} onCancel={() => setDeleteRequest(null)} onConfirm={() => { void performDocumentAction(deleteRequest.ids, deleteRequest.permanent ? 'delete' : 'trash') }} />}
+      {pendingUpload && (
+        <InjectionWarning
+          fileName={pendingUpload.name}
+          onCancel={() => {
+            setPendingUpload(null)
+            setFeedback({ type: 'success', title: 'Upload canceled', message: 'The document was deleted.' })
+          }}
+          onConfirm={() => {
+            const file = pendingUpload
+            setPendingUpload(null)
+            void handleFileSelect(file, true)
+          }}
+        />
+      )}
       <Sidebar
+        isTrashOpen={isTrashOpen}
+        isChangingDocuments={isChangingDocuments}
+        onOpenTrash={() => { selectDocument(null); setIsTrashOpen(true); setFeedback(null); void refreshTrash() }}
+        onDeleteDocument={id => requestDelete([id], false)}
         documents={documents}
         selectedDocumentId={selectedDocumentId}
         onSelectDocument={selectDocument}
@@ -590,7 +710,7 @@ function App() {
       <main className="chat-workspace">
         <header className="chat-header">
           <h1>
-            {selectedDocument
+            {isTrashOpen ? 'Trash' : selectedDocument
               ? selectedDocument.name
               : 'Workspace'}
           </h1>
@@ -621,6 +741,9 @@ function App() {
           </div>
         )}
 
+        {isTrashOpen ? (
+          <TrashView documents={trashedDocuments} busy={isChangingDocuments} loading={trashLoading} error={trashError} onRefresh={() => { void refreshTrash() }} onRestore={ids => { void performDocumentAction(ids, 'restore') }} onDelete={ids => requestDelete(ids, true)} />
+        ) : selectedDocumentId === null ? (
         {currentResponseError && (
           <div
             className="file-feedback error"

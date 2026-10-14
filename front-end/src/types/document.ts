@@ -10,13 +10,15 @@ export type DocumentSummary = {
   created_at: string
   processed_at: string | null
   error: string | null
+  deleted_at?: string | null
 }
 
 // GET /documents/{doc_id} mime_type döndürmüyor.
 export type DocumentDetail = Omit<DocumentSummary, 'mime_type'>
 
 // POST /documents yanıtı.
-export type UploadDocumentResponse = {
+export type UploadDocumentResponse = { requires_confirmation: true } | {
+  requires_confirmation?: false
   id: string
   status: DocumentStatus
   duplicate: boolean

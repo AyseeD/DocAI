@@ -45,18 +45,20 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 // Backend'deki belgeleri listeler.
-export async function getDocuments(): Promise<DocumentSummary[]> {
-  const response = await fetch(`${API_BASE_URL}/documents`)
+export async function getDocuments(trashed = false): Promise<DocumentSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/documents?trashed=${trashed}`)
   return handleResponse<DocumentSummary[]>(response)
 }
 
 // Seçilen dosyayı backend'e gönderir.
 export async function uploadDocument(
   file: File,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  acknowledgeInjection = false
 ): Promise<UploadDocumentResponse> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('acknowledge_injection', String(acknowledgeInjection))
 
   const response = await fetch(`${API_BASE_URL}/documents`, {
     method: 'POST',
@@ -88,4 +90,15 @@ export async function retryDocument(
   )
 
   return handleResponse<RetryDocumentResponse>(response)
+}
+
+export type DocumentAction = 'trash' | 'restore' | 'delete'
+
+export async function changeDocuments(documentIds: string[], action: DocumentAction): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/documents/actions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ document_ids: documentIds, action }),
+  })
+  await handleResponse(response)
 }

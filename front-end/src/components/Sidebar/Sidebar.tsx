@@ -2,6 +2,7 @@
 import { useRef } from 'react'
 import type { DocumentSummary } from '../../types/document'
 import './Sidebar.css'
+import DocumentMenu, { TrashIcon } from '../DocumentMenu'
 
 type ResponsePhase = 'loading' | 'streaming'
 
@@ -13,6 +14,10 @@ type SidebarProps = {
   onFileSelect: (file: File) => void
   isLoading: boolean
   isUploading: boolean
+  isTrashOpen: boolean
+  isChangingDocuments: boolean
+  onOpenTrash: () => void
+  onDeleteDocument: (id: string) => void
   responsePhases: Record<string, ResponsePhase>
   unreadAnswers: Record<string, boolean>
 }
@@ -25,6 +30,10 @@ function Sidebar({
   onFileSelect,
   isLoading,
   isUploading,
+  isTrashOpen,
+  isChangingDocuments,
+  onOpenTrash,
+  onDeleteDocument,
   responsePhases,
   unreadAnswers,
 }: SidebarProps) {
@@ -37,11 +46,11 @@ function Sidebar({
       <button
         type="button"
         className={`sidebar-home-button ${
-          selectedDocumentId === null ? 'active' : ''
+          selectedDocumentId === null && !isTrashOpen ? 'active' : ''
         }`}
         onClick={onGoHome}
         aria-current={
-          selectedDocumentId === null ? 'page' : undefined
+          selectedDocumentId === null && !isTrashOpen ? 'page' : undefined
         }
       >
         <span aria-hidden="true">⌂</span>
@@ -91,6 +100,7 @@ function Sidebar({
           )}
 
           {documents.map((document) => {
+            const isSelected = !isTrashOpen && selectedDocumentId === document.id
             const isSelected =
               selectedDocumentId === document.id
 
@@ -109,9 +119,9 @@ function Sidebar({
                 : document.status
 
             return (
+              <div className="sidebar-document-row" key={document.id}>
               <button
                 type="button"
-                key={document.id}
                 className={`document-item ${
                   isSelected ? 'selected' : ''
                 }`}
@@ -154,10 +164,13 @@ function Sidebar({
                   )}
                 </div>
               </button>
+              <DocumentMenu name={document.name} disabled={isChangingDocuments} onDelete={() => onDeleteDocument(document.id)} />
+              </div>
             )
           })}
         </div>
       </div>
+      <button type="button" className={`sidebar-home-button sidebar-trash-button ${isTrashOpen ? 'active' : ''}`} aria-current={isTrashOpen ? 'page' : undefined} onClick={onOpenTrash}><TrashIcon /> Trash</button>
     </aside>
   )
 }
