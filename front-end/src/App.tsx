@@ -32,6 +32,8 @@ type Feedback = {
   message: string
 }
 
+type ResponsePhase = 'loading' | 'streaming'
+
 function App() {
   const [initialState] = useState(loadMockState)
 
@@ -62,35 +64,49 @@ function App() {
     useState<string | null>(null)
 
   const retryInProgressRef = useRef(false)
+  const uploadInProgressRef = useRef(false)
 
   const [feedback, setFeedback] = useState<Feedback | null>(null)
 
-  const [respondingDocumentId, setRespondingDocumentId] =
-    useState<string | null>(null)
+  // Her belge kendi cevap üretme durumunu tutar.
+  const [responsePhases, setResponsePhases] = useState<
+    Record<string, ResponsePhase>
+  >({})
 
-  const [responsePhase, setResponsePhase] = useState<
-    'idle' | 'loading' | 'streaming'
-  >('idle')
+  // Her belge için bağımsız hata bilgisi.
+  const [responseErrors, setResponseErrors] = useState<
+    Record<string, string>
+  >({})
 
-  // Devam eden SSE isteğini iptal etmek için kullanıyoruz.
-  const streamControllerRef = useRef<AbortController | null>(null)
+  // Arka planda tamamlanan, henüz görülmemiş cevaplar.
+  const [unreadAnswers, setUnreadAnswers] = useState<
+    Record<string, boolean>
+  >({})
 
-  // Eski isteğin yeni belgeye yanıt yazmasını engeller.
-  const streamRequestIdRef = useRef(0)
+  // Her belgenin kendi SSE bağlantısı.
+  const streamControllersRef = useRef<
+    Record<string, AbortController>
+  >({})
 
-  // Henüz tamamlanmamış assistant mesajını takip ediyoruz.
-  const pendingAssistantRef = useRef<{
-    documentId: string
-    messageId: string
-  } | null>(null)
+  // Her belge için bağımsız request ID.
+  const streamRequestIdsRef = useRef<
+    Record<string, number>
+  >({})
 
-  const responseInProgressRef = useRef(false)
-  const uploadInProgressRef = useRef(false)
+  // Tamamlanmamış assistant mesajlarının ID'leri.
+  const pendingAssistantsRef = useRef<
+    Record<string, string>
+  >({})
 
-  // Seçili belgeyi güncel olarak takip ediyoruz.
+  // Aynı belgeye eşzamanlı ikinci soru gönderilmesini engeller.
+  const responseInProgressRef = useRef<
+    Record<string, boolean>
+  >({})
+
+  // Async callback'ler için güncel seçili belge.
   const selectedDocumentIdRef = useRef<string | null>(null)
 
-  // Mock mesaj geçmişi, gerçek belge kayıtlarından ayrı tutuluyor.
+  // Sohbet geçmişini yerel olarak sakla.
   useEffect(() => {
     saveMockState({
       documents: [],
@@ -99,7 +115,7 @@ function App() {
     })
   }, [messagesByDocument])
 
-  // Uygulama açıldığında gerçek belgeleri backend'den getiriyoruz.
+  // Uygulama açıldığında backend'deki belgeleri getir.
   useEffect(() => {
     let isActive = true
 
@@ -135,7 +151,7 @@ function App() {
     }
   }, [])
 
-  // Queued belgelerin durumunu otomatik yeniliyoruz.
+  // İşlenmekte olan belgelerin durumunu yenile.
   useEffect(() => {
     if (!documents.some((document) => document.status === 'queued')) {
       return
@@ -146,6 +162,7 @@ function App() {
 
     const refreshDocuments = async () => {
       if (requestInProgress) return
+
       requestInProgress = true
 
       const revision = documentRevisionRef.current
@@ -172,10 +189,15 @@ function App() {
     }
   }, [documents])
 
-  // Uygulama kapatılırken devam eden SSE isteğini iptal ediyoruz.
+  // Uygulama kapandığında bütün SSE isteklerini iptal et.
+  // Belge değiştirmek bu cleanup'ı çalıştırmaz.
   useEffect(() => {
+    const controllers = streamControllersRef.current
+
     return () => {
-      streamControllerRef.current?.abort()
+      Object.values(controllers).forEach((controller) => {
+        controller.abort()
+      })
     }
   }, [])
 
@@ -187,13 +209,15 @@ function App() {
     ? messagesByDocument[selectedDocumentId] ?? []
     : []
 
+  const currentResponsePhase = selectedDocumentId
+    ? responsePhases[selectedDocumentId]
+    : undefined
+
   const isCurrentDocumentLoading =
-    respondingDocumentId === selectedDocumentId &&
-    responsePhase === 'loading'
+    currentResponsePhase === 'loading'
 
   const isCurrentDocumentStreaming =
-    respondingDocumentId === selectedDocumentId &&
-    responsePhase === 'streaming'
+    currentResponsePhase === 'streaming'
 
   // Belge değiştiğinde eski SSE akışını durduruyoruz.
   const selectDocument = (documentId: string | null) => {
@@ -219,14 +243,28 @@ function App() {
 
         pendingAssistantRef.current = null
       }
+  const isCurrentDocumentResponding =
+    currentResponsePhase !== undefined
 
-      responseInProgressRef.current = false
-      setRespondingDocumentId(null)
-      setResponsePhase('idle')
-    }
+  const currentResponseError = selectedDocumentId
+    ? responseErrors[selectedDocumentId]
+    : undefined
 
+  // Belge değiştir; diğer belgelerin isteklerine dokunma.
+  const selectDocument = (documentId: string | null) => {
     selectedDocumentIdRef.current = documentId
     setSelectedDocumentId(documentId)
+
+    // Belge açıldığında okunmamış cevap bildirimi temizlenir.
+    if (documentId) {
+      setUnreadAnswers((previous) => {
+        if (!previous[documentId]) return previous
+
+        const updated = { ...previous }
+        delete updated[documentId]
+        return updated
+      })
+    }
   }
 
   const handleGoHome = () => {
@@ -357,7 +395,7 @@ function App() {
     }
   }
 
-  // Failed durumundaki belgeyi yeniden işlemeye gönderiyoruz.
+  // Failed durumundaki belgeyi yeniden işlemeye gönder.
   const handleRetryDocument = async (documentId: string) => {
     if (retryInProgressRef.current) return
 
@@ -400,6 +438,7 @@ function App() {
     }
   }
 
+  // Her belge kendi SSE isteğini bağımsız yönetir.
   const handleSendMessage = async (message: string) => {
     const document = documents.find(
       (item) => item.id === selectedDocumentIdRef.current
@@ -408,25 +447,28 @@ function App() {
     if (
       !document ||
       document.status !== 'ready' ||
-      responseInProgressRef.current ||
+      responseInProgressRef.current[document.id] ||
       !message.trim()
     ) {
       return
     }
 
     const documentId = document.id
-    const requestId = ++streamRequestIdRef.current
+
+    const requestId =
+      (streamRequestIdsRef.current[documentId] ?? 0) + 1
+
+    streamRequestIdsRef.current[documentId] = requestId
+
     const controller = new AbortController()
 
-    streamControllerRef.current = controller
-    responseInProgressRef.current = true
+    streamControllersRef.current[documentId] = controller
+    responseInProgressRef.current[documentId] = true
 
     const assistantMessageId = crypto.randomUUID()
 
-    pendingAssistantRef.current = {
-      documentId,
-      messageId: assistantMessageId,
-    }
+    pendingAssistantsRef.current[documentId] =
+      assistantMessageId
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -435,7 +477,6 @@ function App() {
       createdAt: new Date().toISOString(),
     }
 
-    // Önce kullanıcının mesajını ekliyoruz.
     setMessagesByDocument((previous) => ({
       ...previous,
       [documentId]: [
@@ -444,15 +485,36 @@ function App() {
       ],
     }))
 
-    setRespondingDocumentId(documentId)
-    setResponsePhase('loading')
+    setResponsePhases((previous) => ({
+      ...previous,
+      [documentId]: 'loading',
+    }))
+
+    // Yeni soruda yalnızca bu belgenin eski hatasını temizle.
+    setResponseErrors((previous) => {
+      if (!previous[documentId]) return previous
+
+      const updated = { ...previous }
+      delete updated[documentId]
+      return updated
+    })
+
+    // Yeni soru gönderildiğinde eski "Answer ready" bildirimi temizlenir.
+    setUnreadAnswers((previous) => {
+      if (!previous[documentId]) return previous
+
+      const updated = { ...previous }
+      delete updated[documentId]
+      return updated
+    })
+
     setFeedback(null)
 
     let receivedSources: Source[] = []
+    let answerCompleted = false
 
-    // Yalnızca hâlâ geçerli olan isteğin UI'ı değiştirmesine izin veriyoruz.
     const isCurrentRequest = () =>
-      streamRequestIdRef.current === requestId &&
+      streamRequestIdsRef.current[documentId] === requestId &&
       !controller.signal.aborted
 
     const removePartialAnswer = () => {
@@ -471,16 +533,22 @@ function App() {
         {
           onSources: (sources) => {
             if (!isCurrentRequest()) return
+
             receivedSources = sources
           },
 
           onDelta: (text) => {
             if (!isCurrentRequest()) return
 
-            setResponsePhase('streaming')
+            setResponsePhases((previous) => ({
+              ...previous,
+              [documentId]: 'streaming',
+            }))
 
             setMessagesByDocument((previous) => {
-              const existingMessages = previous[documentId] ?? []
+              const existingMessages =
+                previous[documentId] ?? []
+
               const assistantExists = existingMessages.some(
                 (item) => item.id === assistantMessageId
               )
@@ -506,7 +574,10 @@ function App() {
                 ...previous,
                 [documentId]: existingMessages.map((item) =>
                   item.id === assistantMessageId
-                    ? { ...item, content: item.content + text }
+                    ? {
+                        ...item,
+                        content: item.content + text,
+                      }
                     : item
                 ),
               }
@@ -516,15 +587,22 @@ function App() {
           onDone: (result) => {
             if (!isCurrentRequest()) return
 
-            // Yanıt başarıyla tamamlandı; artık silinmemeli.
-            pendingAssistantRef.current = null
+            answerCompleted = true
+            delete pendingAssistantsRef.current[documentId]
 
-            // Yalnızca yanıtın gerçekten kullandığı kaynakları saklıyoruz.
-            const citedSources = receivedSources.filter((source) =>
-              result.cited_labels.includes(source.label)
+            // Başka belge açıkken tamamlanan cevabı işaretle.
+            if (selectedDocumentIdRef.current !== documentId) {
+              setUnreadAnswers((previous) => ({
+                ...previous,
+                [documentId]: true,
+              }))
+            }
+
+            const citedSources = receivedSources.filter(
+              (source) =>
+                result.cited_labels.includes(source.label)
             )
 
-            // Tamamlanan yanıtı kaynak ve performans bilgileriyle saklıyoruz.
             const completedMessage: ChatMessage = {
               id: assistantMessageId,
               role: 'assistant',
@@ -533,7 +611,8 @@ function App() {
               metrics: {
                 cacheHit: result.cache_hit,
                 tokenCount:
-                  result.generation_token_usage?.total_token_count ?? null,
+                  result.generation_token_usage
+                    ?.total_token_count ?? null,
                 latencyMs: result.latency_ms,
                 aiMode: result.ai_mode,
               },
@@ -541,7 +620,8 @@ function App() {
             }
 
             setMessagesByDocument((previous) => {
-              const existingMessages = previous[documentId] ?? []
+              const existingMessages =
+                previous[documentId] ?? []
 
               return {
                 ...previous,
@@ -557,26 +637,39 @@ function App() {
         },
         controller.signal
       )
+
+      // Akış "done" olmadan sona ererse yarım cevabı koruma.
+      if (!answerCompleted && isCurrentRequest()) {
+        throw new Error(
+          'The answer stream ended before completion. Please retry.'
+        )
+      }
     } catch (error) {
       if (!isCurrentRequest()) return
 
-      // Hata olduğunda tamamlanmamış assistant yanıtını siliyoruz.
       removePartialAnswer()
+      delete pendingAssistantsRef.current[documentId]
 
-      setFeedback({
-        type: 'error',
-        title: 'Could not generate answer',
-        message:
+      setResponseErrors((previous) => ({
+        ...previous,
+        [documentId]:
           error instanceof Error
             ? error.message
             : 'Please try again.',
-      })
+      }))
     } finally {
-      if (streamRequestIdRef.current === requestId) {
-        streamControllerRef.current = null
-        responseInProgressRef.current = false
-        setRespondingDocumentId(null)
-        setResponsePhase('idle')
+      if (
+        streamRequestIdsRef.current[documentId] === requestId
+      ) {
+        delete streamControllersRef.current[documentId]
+        delete responseInProgressRef.current[documentId]
+        delete pendingAssistantsRef.current[documentId]
+
+        setResponsePhases((previous) => {
+          const updated = { ...previous }
+          delete updated[documentId]
+          return updated
+        })
       }
     }
   }
@@ -610,6 +703,8 @@ function App() {
         onFileSelect={handleFileSelect}
         isLoading={isDocumentsLoading}
         isUploading={isUploading}
+        responsePhases={responsePhases}
+        unreadAnswers={unreadAnswers}
       />
 
       <main className="chat-workspace">
@@ -624,7 +719,11 @@ function App() {
         {feedback && (
           <div
             className={`file-feedback ${feedback.type}`}
-            role={feedback.type === 'error' ? 'alert' : 'status'}
+            role={
+              feedback.type === 'error'
+                ? 'alert'
+                : 'status'
+            }
           >
             <div>
               <strong>{feedback.title}</strong>
@@ -645,6 +744,38 @@ function App() {
         {isTrashOpen ? (
           <TrashView documents={trashedDocuments} busy={isChangingDocuments} loading={trashLoading} error={trashError} onRefresh={() => { void refreshTrash() }} onRestore={ids => { void performDocumentAction(ids, 'restore') }} onDelete={ids => requestDelete(ids, true)} />
         ) : selectedDocumentId === null ? (
+        {currentResponseError && (
+          <div
+            className="file-feedback error"
+            role="alert"
+          >
+            <div>
+              <strong>Could not generate answer</strong>
+              <p>{currentResponseError}</p>
+            </div>
+
+            <button
+              type="button"
+              className="file-feedback-close"
+              aria-label="Dismiss answer error"
+              onClick={() => {
+                if (!selectedDocumentId) return
+
+                const documentId = selectedDocumentId
+
+                setResponseErrors((previous) => {
+                  const updated = { ...previous }
+                  delete updated[documentId]
+                  return updated
+                })
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {selectedDocumentId === null ? (
           <HomeWorkspace
             onFileSelect={handleFileSelect}
             isUploading={isUploading}
@@ -656,7 +787,9 @@ function App() {
               document={selectedDocument ?? null}
               isLoading={isCurrentDocumentLoading}
               isStreaming={isCurrentDocumentStreaming}
-              isRetrying={retryingDocumentId === selectedDocumentId}
+              isRetrying={
+                retryingDocumentId === selectedDocumentId
+              }
               onRetryDocument={handleRetryDocument}
             />
 
@@ -666,7 +799,7 @@ function App() {
               isUploading={isUploading}
               disabled={
                 selectedDocument?.status !== 'ready' ||
-                responsePhase !== 'idle'
+                isCurrentDocumentResponding
               }
             />
           </>
