@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from 'react'
 import DeleteConfirmation from './components/DeleteConfirmation'
 import TrashView from './components/TrashView'
@@ -23,21 +22,16 @@ import {
 import type { DocumentSummary } from './types/document'
 import type { ChatMessage } from './types/chat'
 import './App.css'
-
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 const DOCUMENT_POLL_INTERVAL = 2000
-
 type Feedback = {
   type: 'success' | 'error'
   title: string
   message: string
 }
-
 type ResponsePhase = 'loading' | 'streaming'
-
 function App() {
   const [initialState] = useState(loadMockState)
-
   const [documents, setDocuments] = useState<DocumentSummary[]>([])
   const [isDocumentsLoading, setIsDocumentsLoading] = useState(true)
   const [isTrashOpen, setIsTrashOpen] = useState(false)
@@ -50,63 +44,51 @@ function App() {
   const documentMutationRef = useRef(false)
   const documentRevisionRef = useRef(0)
   const trashRequestRef = useRef(0)
-
+  const [draftsByDocument, setDraftsByDocument] = useState<
+    Record<string, string>
+  >({})
   const [selectedDocumentId, setSelectedDocumentId] =
     useState<string | null>(null)
-
   const [messagesByDocument, setMessagesByDocument] = useState<
     Record<string, ChatMessage[]>
   >(initialState.messagesByDocument)
-
   const [isUploading, setIsUploading] = useState(false)
   const [pendingUpload, setPendingUpload] = useState<File | null>(null)
-
   const [retryingDocumentId, setRetryingDocumentId] =
     useState<string | null>(null)
-
   const retryInProgressRef = useRef(false)
   const uploadInProgressRef = useRef(false)
-
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-
   // Her belge kendi cevap üretme durumunu tutar.
   const [responsePhases, setResponsePhases] = useState<
     Record<string, ResponsePhase>
   >({})
-
   // Her belge için bağımsız hata bilgisi.
   const [responseErrors, setResponseErrors] = useState<
     Record<string, string>
   >({})
-
   // Arka planda tamamlanan, henüz görülmemiş cevaplar.
   const [unreadAnswers, setUnreadAnswers] = useState<
     Record<string, boolean>
   >({})
-
   // Her belgenin kendi SSE bağlantısı.
   const streamControllersRef = useRef<
     Record<string, AbortController>
   >({})
-
   // Her belge için bağımsız request ID.
   const streamRequestIdsRef = useRef<
     Record<string, number>
   >({})
-
   // Tamamlanmamış assistant mesajlarının ID'leri.
   const pendingAssistantsRef = useRef<
     Record<string, string>
   >({})
-
   // Aynı belgeye eşzamanlı ikinci soru gönderilmesini engeller.
   const responseInProgressRef = useRef<
     Record<string, boolean>
   >({})
-
   // Async callback'ler için güncel seçili belge.
   const selectedDocumentIdRef = useRef<string | null>(null)
-
   // Sohbet geçmişini yerel olarak sakla.
   useEffect(() => {
     saveMockState({
@@ -115,21 +97,16 @@ function App() {
       messagesByDocument,
     })
   }, [messagesByDocument])
-
   // Uygulama açıldığında backend'deki belgeleri getir.
   useEffect(() => {
     let isActive = true
-
     const loadDocuments = async () => {
       try {
         const backendDocuments = await getDocuments()
-
         if (!isActive) return
-
         setDocuments(backendDocuments)
       } catch (error) {
         if (!isActive) return
-
         setFeedback({
           type: 'error',
           title: 'Could not load documents',
@@ -144,14 +121,11 @@ function App() {
         }
       }
     }
-
     void loadDocuments()
-
     return () => {
       isActive = false
     }
   }, [])
-
   // Server-side expiry also removes local chat copies when this browser is open.
   useEffect(() => {
     let active = true
@@ -164,6 +138,7 @@ function App() {
         const retainedIds = new Set(await getRetainedDocumentIds())
         if (!active || revision !== documentRevisionRef.current || documentMutationRef.current || uploadInProgressRef.current) return
         setMessagesByDocument(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => retainedIds.has(id))))
+        setDraftsByDocument(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => retainedIds.has(id))))
         setTrashedDocuments(previous => previous.filter(doc => retainedIds.has(doc.id)))
       } catch (error) {
         // Never discard history when the retention check fails.
@@ -176,25 +151,19 @@ function App() {
     const interval = setInterval(() => { void reconcileDeletedDocuments() }, 60_000)
     return () => { active = false; clearInterval(interval) }
   }, [])
-
   // İşlenmekte olan belgelerin durumunu yenile.
   useEffect(() => {
     if (!documents.some((document) => document.status === 'queued')) {
       return
     }
-
     let isActive = true
     let requestInProgress = false
-
     const refreshDocuments = async () => {
       if (requestInProgress) return
-
       requestInProgress = true
-
       const revision = documentRevisionRef.current
       try {
         const updatedDocuments = await getDocuments()
-
         if (isActive && revision === documentRevisionRef.current && !documentMutationRef.current) {
           setDocuments(updatedDocuments)
         }
@@ -204,77 +173,61 @@ function App() {
         requestInProgress = false
       }
     }
-
     const interval = setInterval(() => {
       void refreshDocuments()
     }, DOCUMENT_POLL_INTERVAL)
-
     return () => {
       isActive = false
       clearInterval(interval)
     }
   }, [documents])
-
   // Uygulama kapandığında bütün SSE isteklerini iptal et.
   // Belge değiştirmek bu cleanup'ı çalıştırmaz.
   useEffect(() => {
     const controllers = streamControllersRef.current
-
     return () => {
       Object.values(controllers).forEach((controller) => {
         controller.abort()
       })
     }
   }, [])
-
   const selectedDocument = documents.find(
     (document) => document.id === selectedDocumentId
   )
-
   const currentMessages = selectedDocumentId
     ? messagesByDocument[selectedDocumentId] ?? []
     : []
-
   const currentResponsePhase = selectedDocumentId
     ? responsePhases[selectedDocumentId]
     : undefined
-
   const isCurrentDocumentLoading =
     currentResponsePhase === 'loading'
-
   const isCurrentDocumentStreaming =
     currentResponsePhase === 'streaming'
-
   const isCurrentDocumentResponding =
     currentResponsePhase !== undefined
-
   const currentResponseError = selectedDocumentId
     ? responseErrors[selectedDocumentId]
     : undefined
-
   // Belge değiştir; diğer belgelerin isteklerine dokunma.
   const selectDocument = (documentId: string | null) => {
     setIsTrashOpen(false)
     selectedDocumentIdRef.current = documentId
     setSelectedDocumentId(documentId)
-
     // Belge açıldığında okunmamış cevap bildirimi temizlenir.
     if (documentId) {
       setUnreadAnswers((previous) => {
         if (!previous[documentId]) return previous
-
         const updated = { ...previous }
         delete updated[documentId]
         return updated
       })
     }
   }
-
   const handleGoHome = () => {
     selectDocument(null)
     setFeedback(null)
   }
-
   const refreshTrash = async () => {
     const request = ++trashRequestRef.current
     setTrashLoading(true)
@@ -288,12 +241,10 @@ function App() {
       if (request === trashRequestRef.current) setTrashLoading(false)
     }
   }
-
   const requestDelete = (ids: string[], permanent: boolean) => {
     setDeleteError(null)
     setDeleteRequest({ ids, permanent })
   }
-
   // Cancel only deleted documents; navigation keeps background answers running.
   const cancelDocumentResponses = (ids: string[]) => {
     const pendingMessages = new Map<string, string>()
@@ -317,7 +268,6 @@ function App() {
     setResponseErrors(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
     setUnreadAnswers(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
   }
-
   const performDocumentAction = async (ids: string[], action: DocumentAction) => {
     if (documentMutationRef.current) return
     documentMutationRef.current = true
@@ -341,6 +291,7 @@ function App() {
           setDocuments(previous => [...previous.filter(doc => !ids.includes(doc.id)), ...restored].sort((a, b) => b.created_at.localeCompare(a.created_at)))
         } else {
           setMessagesByDocument(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
+          setDraftsByDocument(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))))
         }
       }
       setDeleteRequest(null)
@@ -355,11 +306,9 @@ function App() {
       setIsChangingDocuments(false)
     }
   }
-
   const handleFileSelect = async (file: File, acknowledgeInjection = false) => {
     if (uploadInProgressRef.current) return
-
-    if (!/\.(pdf|txt)$/i.test(file.name)) {
+    if (!/\\.(pdf|txt)$/i.test(file.name)) {
       setFeedback({
         type: 'error',
         title: 'Unsupported file type',
@@ -367,7 +316,6 @@ function App() {
       })
       return
     }
-
     if (file.size === 0) {
       setFeedback({
         type: 'error',
@@ -376,7 +324,6 @@ function App() {
       })
       return
     }
-
     if (file.size > MAX_FILE_SIZE) {
       setFeedback({
         type: 'error',
@@ -385,23 +332,22 @@ function App() {
       })
       return
     }
-
     uploadInProgressRef.current = true
     documentRevisionRef.current += 1
     setIsUploading(true)
     setFeedback(null)
-
     try {
       const uploadResult = await uploadDocument(file, undefined, acknowledgeInjection)
-      if (uploadResult.requires_confirmation) {
+      if ('requires_confirmation' in uploadResult && uploadResult.requires_confirmation) {
         setPendingUpload(file)
         return
       }
+      if (!('id' in uploadResult)) {
+        throw new Error('Unexpected upload response.')
+      }
       const backendDocuments = await getDocuments()
-
       setDocuments(backendDocuments)
       selectDocument(uploadResult.id)
-
       setFeedback({
         type: 'success',
         title: file.name,
@@ -424,18 +370,14 @@ function App() {
       setIsUploading(false)
     }
   }
-
   // Failed durumundaki belgeyi yeniden işlemeye gönder.
   const handleRetryDocument = async (documentId: string) => {
     if (retryInProgressRef.current) return
-
     retryInProgressRef.current = true
     setRetryingDocumentId(documentId)
     setFeedback(null)
-
     try {
       await retryDocument(documentId)
-
       setDocuments((previous) =>
         previous.map((document) =>
           document.id === documentId
@@ -447,7 +389,6 @@ function App() {
             : document
         )
       )
-
       setFeedback({
         type: 'success',
         title: 'Processing restarted',
@@ -467,13 +408,11 @@ function App() {
       setRetryingDocumentId(null)
     }
   }
-
   // Her belge kendi SSE isteğini bağımsız yönetir.
   const handleSendMessage = async (message: string) => {
     const document = documents.find(
       (item) => item.id === selectedDocumentIdRef.current
     )
-
     if (
       !document ||
       document.status !== 'ready' ||
@@ -482,31 +421,22 @@ function App() {
     ) {
       return
     }
-
     const documentId = document.id
-
     const requestId =
       (streamRequestIdsRef.current[documentId] ?? 0) + 1
-
     streamRequestIdsRef.current[documentId] = requestId
-
     const controller = new AbortController()
-
     streamControllersRef.current[documentId] = controller
     responseInProgressRef.current[documentId] = true
-
     const assistantMessageId = crypto.randomUUID()
-
     pendingAssistantsRef.current[documentId] =
       assistantMessageId
-
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
       content: message,
       createdAt: new Date().toISOString(),
     }
-
     setMessagesByDocument((previous) => ({
       ...previous,
       [documentId]: [
@@ -514,39 +444,30 @@ function App() {
         userMessage,
       ],
     }))
-
     setResponsePhases((previous) => ({
       ...previous,
       [documentId]: 'loading',
     }))
-
     // Yeni soruda yalnızca bu belgenin eski hatasını temizle.
     setResponseErrors((previous) => {
       if (!previous[documentId]) return previous
-
       const updated = { ...previous }
       delete updated[documentId]
       return updated
     })
-
     // Yeni soru gönderildiğinde eski "Answer ready" bildirimi temizlenir.
     setUnreadAnswers((previous) => {
       if (!previous[documentId]) return previous
-
       const updated = { ...previous }
       delete updated[documentId]
       return updated
     })
-
     setFeedback(null)
-
     let receivedSources: Source[] = []
     let answerCompleted = false
-
     const isCurrentRequest = () =>
       streamRequestIdsRef.current[documentId] === requestId &&
       !controller.signal.aborted
-
     const removePartialAnswer = () => {
       setMessagesByDocument((previous) => ({
         ...previous,
@@ -555,7 +476,6 @@ function App() {
         ),
       }))
     }
-
     try {
       await streamQuestion(
         message,
@@ -563,16 +483,12 @@ function App() {
         {
           onSources: (sources) => {
             if (!isCurrentRequest()) return
-
             receivedSources = sources
           },
-
           onDone: (result) => {
             if (!isCurrentRequest()) return
-
             answerCompleted = true
             delete pendingAssistantsRef.current[documentId]
-
             // Başka belge açıkken tamamlanan cevabı işaretle.
             if (selectedDocumentIdRef.current !== documentId) {
               setUnreadAnswers((previous) => ({
@@ -580,12 +496,10 @@ function App() {
                 [documentId]: true,
               }))
             }
-
             const citedSources = receivedSources.filter(
               (source) =>
                 result.cited_labels.includes(source.label)
             )
-
             const completedMessage: ChatMessage = {
               id: assistantMessageId,
               role: 'assistant',
@@ -601,11 +515,9 @@ function App() {
               },
               createdAt: new Date().toISOString(),
             }
-
             setMessagesByDocument((previous) => {
               const existingMessages =
                 previous[documentId] ?? []
-
               return {
                 ...previous,
                 [documentId]: [
@@ -620,7 +532,6 @@ function App() {
         },
         controller.signal
       )
-
       // Akış "done" olmadan sona ererse yarım cevabı koruma.
       if (!answerCompleted && isCurrentRequest()) {
         throw new Error(
@@ -629,10 +540,8 @@ function App() {
       }
     } catch (error) {
       if (!isCurrentRequest()) return
-
       removePartialAnswer()
       delete pendingAssistantsRef.current[documentId]
-
       setResponseErrors((previous) => ({
         ...previous,
         [documentId]:
@@ -647,7 +556,6 @@ function App() {
         delete streamControllersRef.current[documentId]
         delete responseInProgressRef.current[documentId]
         delete pendingAssistantsRef.current[documentId]
-
         setResponsePhases((previous) => {
           const updated = { ...previous }
           delete updated[documentId]
@@ -656,7 +564,6 @@ function App() {
       }
     }
   }
-
   return (
     <div className="app">
       {deleteRequest && <DeleteConfirmation count={deleteRequest.ids.length} permanent={deleteRequest.permanent} busy={isChangingDocuments} error={deleteError} onCancel={() => setDeleteRequest(null)} onConfirm={() => { void performDocumentAction(deleteRequest.ids, deleteRequest.permanent ? 'delete' : 'trash') }} />}
@@ -689,7 +596,6 @@ function App() {
         responsePhases={responsePhases}
         unreadAnswers={unreadAnswers}
       />
-
       <main className="chat-workspace">
         <header className="chat-header">
           <h1>
@@ -698,7 +604,6 @@ function App() {
               : 'Workspace'}
           </h1>
         </header>
-
         {feedback && (
           <div
             className={`file-feedback ${feedback.type}`}
@@ -712,7 +617,6 @@ function App() {
               <strong>{feedback.title}</strong>
               <p>{feedback.message}</p>
             </div>
-
             <button
               type="button"
               className="file-feedback-close"
@@ -723,7 +627,6 @@ function App() {
             </button>
           </div>
         )}
-
         {currentResponseError && (
           <div
             className="file-feedback error"
@@ -733,16 +636,13 @@ function App() {
               <strong>Could not generate answer</strong>
               <p>{currentResponseError}</p>
             </div>
-
             <button
               type="button"
               className="file-feedback-close"
               aria-label="Dismiss answer error"
               onClick={() => {
                 if (!selectedDocumentId) return
-
                 const documentId = selectedDocumentId
-
                 setResponseErrors((previous) => {
                   const updated = { ...previous }
                   delete updated[documentId]
@@ -754,7 +654,6 @@ function App() {
             </button>
           </div>
         )}
-
         {isTrashOpen ? (
           <TrashView
             documents={trashedDocuments}
@@ -782,8 +681,15 @@ function App() {
               }
               onRetryDocument={handleRetryDocument}
             />
-
             <ChatInput
+              key={selectedDocumentId}
+              message={draftsByDocument[selectedDocumentId] ?? ''}
+              onMessageChange={(value) => {
+                setDraftsByDocument((previous) => ({
+                  ...previous,
+                  [selectedDocumentId]: value,
+                }))
+              }}
               onSendMessage={handleSendMessage}
               onFileSelect={handleFileSelect}
               isUploading={isUploading}
@@ -798,5 +704,4 @@ function App() {
     </div>
   )
 }
-
 export default App

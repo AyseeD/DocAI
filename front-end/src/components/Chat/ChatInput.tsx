@@ -1,7 +1,5 @@
-
 import {
   useRef,
-  useState,
   type FormEvent,
   type KeyboardEvent,
 } from 'react'
@@ -9,6 +7,8 @@ import './ChatInput.css'
 
 type ChatInputProps = {
   onSendMessage: (message: string) => void
+  message: string
+  onMessageChange: (message: string) => void
   onFileSelect?: (file: File) => void
   disabled?: boolean
   isUploading?: boolean
@@ -17,12 +17,13 @@ type ChatInputProps = {
 
 function ChatInput({
   onSendMessage,
+  message,
+  onMessageChange,
   onFileSelect,
   disabled = false,
   isUploading = false,
   isHome = false,
 }: ChatInputProps) {
-  const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const canSend = !disabled && message.trim().length > 0
@@ -31,7 +32,7 @@ function ChatInput({
     if (!canSend) return
 
     onSendMessage(message.trim())
-    setMessage('')
+    onMessageChange('')
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -60,7 +61,7 @@ function ChatInput({
       <textarea
         className="chat-input-textarea"
         value={message}
-        onChange={(event) => setMessage(event.target.value)}
+        onChange={(event) => onMessageChange(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={
           isHome

@@ -70,6 +70,8 @@ function HomeWorkspace({
         <div className="home-input-wrapper">
           <ChatInput
             onSendMessage={() => {}}
+            message=""
+            onMessageChange={() => {}}
             onFileSelect={onFileSelect}
             isUploading={isUploading}
             disabled

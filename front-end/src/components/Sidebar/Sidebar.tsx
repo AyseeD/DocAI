@@ -1,8 +1,8 @@
 
 import { useRef } from 'react'
 import type { DocumentSummary } from '../../types/document'
-import './Sidebar.css'
 import DocumentMenu, { TrashIcon } from '../DocumentMenu'
+import './Sidebar.css'
 
 type ResponsePhase = 'loading' | 'streaming'
 
@@ -38,24 +38,23 @@ function Sidebar({
   unreadAnswers,
 }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isHomeActive = selectedDocumentId === null && !isTrashOpen
 
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">DocAI</div>
 
-      <button
-        type="button"
-        className={`sidebar-home-button ${
-          selectedDocumentId === null && !isTrashOpen ? 'active' : ''
-        }`}
-        onClick={onGoHome}
-        aria-current={
-          selectedDocumentId === null && !isTrashOpen ? 'page' : undefined
-        }
-      >
-        <span aria-hidden="true">⌂</span>
-        <span>Home</span>
-      </button>
+      <nav className="sidebar-navigation" aria-label="Main navigation">
+        <button
+          type="button"
+          className={`sidebar-home-button ${isHomeActive ? 'active' : ''}`}
+          onClick={onGoHome}
+          aria-current={isHomeActive ? 'page' : undefined}
+        >
+          <span className="sidebar-nav-icon" aria-hidden="true">⌂</span>
+          <span>Home</span>
+        </button>
+      </nav>
 
       <button
         type="button"
@@ -63,7 +62,8 @@ function Sidebar({
         onClick={() => fileInputRef.current?.click()}
         disabled={isUploading}
       >
-        {isUploading ? 'Uploading...' : '+ Add document'}
+        <span aria-hidden="true">+</span>
+        <span>{isUploading ? 'Uploading...' : 'Add document'}</span>
       </button>
 
       <input
@@ -74,36 +74,33 @@ function Sidebar({
         disabled={isUploading}
         onChange={(event) => {
           const file = event.target.files?.[0]
-
-          if (file) {
-            onFileSelect(file)
-          }
-
+          if (file) onFileSelect(file)
           event.target.value = ''
         }}
       />
 
-      <div className="documents-section">
-        <h2>Documents</h2>
+      <section className="documents-section" aria-label="Documents">
+        <div className="documents-section-heading">
+          <h2>Documents</h2>
+          {!isLoading && (
+            <span className="documents-count">{documents.length}</span>
+          )}
+        </div>
 
         <div className="document-list">
           {isLoading && (
-            <p className="document-list-message">
-              Loading documents...
-            </p>
+            <p className="document-list-message">Loading documents...</p>
           )}
 
           {!isLoading && documents.length === 0 && (
-            <p className="document-list-message">
-              No documents yet.
-            </p>
+            <p className="document-list-message">No documents yet.</p>
           )}
 
           {documents.map((document) => {
-            const isSelected = !isTrashOpen && selectedDocumentId === document.id
+            const isSelected =
+              !isTrashOpen && selectedDocumentId === document.id
 
-            const isGenerating =
-              Boolean(responsePhases[document.id])
+            const isGenerating = Boolean(responsePhases[document.id])
 
             const hasUnreadAnswer =
               !isGenerating &&
@@ -117,22 +114,20 @@ function Sidebar({
                 : document.status
 
             return (
-              <div className="sidebar-document-row" key={document.id}>
+              <div
+                className={`sidebar-document-row ${isSelected ? 'selected' : ''}`}
+                key={document.id}
+              >
                 <button
                   type="button"
-                  className={`document-item ${
-                    isSelected ? 'selected' : ''
-                  }`}
+                  className="document-item"
                   onClick={() => onSelectDocument(document.id)}
                   aria-pressed={isSelected}
+                  title={document.name}
                 >
-                  <div className="document-name">
-                    {document.name}
-                  </div>
+                  <span className="document-name">{document.name}</span>
 
-                  <div
-                    className={`document-status ${statusClass}`}
-                  >
+                  <span className={`document-status ${statusClass}`}>
                     {isGenerating ? (
                       <>
                         <span
@@ -160,15 +155,33 @@ function Sidebar({
                     ) : (
                       <span>{document.status}</span>
                     )}
-                  </div>
+                  </span>
                 </button>
-                <DocumentMenu name={document.name} disabled={isChangingDocuments} onDelete={() => onDeleteDocument(document.id)} />
+
+                <DocumentMenu
+                  name={document.name}
+                  disabled={isChangingDocuments}
+                  onDelete={() => onDeleteDocument(document.id)}
+                />
               </div>
             )
           })}
         </div>
+      </section>
+
+      <div className="sidebar-footer">
+        <button
+          type="button"
+          className={`sidebar-home-button sidebar-trash-button ${
+            isTrashOpen ? 'active' : ''
+          }`}
+          aria-current={isTrashOpen ? 'page' : undefined}
+          onClick={onOpenTrash}
+        >
+          <TrashIcon />
+          <span>Trash</span>
+        </button>
       </div>
-      <button type="button" className={`sidebar-home-button sidebar-trash-button ${isTrashOpen ? 'active' : ''}`} aria-current={isTrashOpen ? 'page' : undefined} onClick={onOpenTrash}><TrashIcon /> Trash</button>
     </aside>
   )
 }

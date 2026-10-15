@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { DocumentSummary } from '../types/document'
-import DocumentMenu, { TrashIcon } from './DocumentMenu'
+import { TrashIcon } from './DocumentMenu'
 
 type Props = { documents: DocumentSummary[]; busy: boolean; loading: boolean; error: string | null; onRefresh: () => void; onRestore: (ids: string[]) => void; onDelete: (ids: string[]) => void }
 
@@ -22,7 +22,6 @@ export default function TrashView({ documents, busy, loading, error, onRefresh, 
       <ul className="trash-list">{documents.map(doc => <li key={doc.id}>
         <input type="checkbox" aria-label={`Select ${doc.name}`} disabled={busy} checked={ids.includes(doc.id)} onChange={() => setSelected(ids.includes(doc.id) ? ids.filter(id => id !== doc.id) : [...ids, doc.id])} />
         <div className="trash-document"><strong>{doc.name}</strong><span>{doc.deleted_at ? `Deleted ${new Date(doc.deleted_at).toLocaleDateString()}` : 'Deleted document'}</span></div>
-        <DocumentMenu name={doc.name} trashed disabled={busy} onRestore={() => onRestore([doc.id])} onDelete={() => onDelete([doc.id])} />
       </li>)}</ul>
     </>}
   </section>
